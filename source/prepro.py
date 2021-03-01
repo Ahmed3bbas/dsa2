@@ -164,10 +164,20 @@ def pd_colnum_normalize(df, col, pars):
     dfnum_norm, colnum_norm = pd_colnum_normalize(df, colname=colnum,  pars=pars, suffix = "_norm",
                                                   return_val="dataframe,param")
     log(colnum_norm)
+
+    # update: save col and colnum_norm in dictionary 
+    col_pars = {}
+    col_pars['cols_new'] = {
+     'colnum'     :  col ,    # list
+     'colnum_norm' :  colnum_norm       # list
+    }
     if pars.get('path_features_store', None) is not None:
         path_features_store = pars['path_features_store']
         save_features(dfnum_norm, 'dfnum_norm', path_features_store)
-    return dfnum_norm, colnum_norm
+
+    # old: return dfnum_norm, colnum_norm
+    # update: return dfnum_norm, col_pars ==> return col_pars as dictionary for the next step in run_preprocess/preprocess
+    return dfnum_norm, col_pars
 
 
 def pd_colnum_quantile_norm(df, col, pars={}):
