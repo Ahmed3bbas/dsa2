@@ -56,7 +56,8 @@ def pd_coltext_clean( df, col, stopwords= None , pars=None):
 
     def coltext_remove_stopwords(text, stopwords=None, sep=" "):
         tokens = text.split(sep)
-        tokens = [t.strip() for t in tokens if t.strip() not in stopwords]
+        if stopwords != None:
+            tokens = [t.strip() for t in tokens if t.strip() not in stopwords]
         return " ".join(tokens)
 
     # list1 = []
