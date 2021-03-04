@@ -130,7 +130,7 @@ def pd_sample_imblearn(df=None, col=None, pars=None):
     """
         Over-sample
     """
-    params_check(pars, ['model_name', 'pars_resample', 'coly', 'dfy'])
+    params_check(pars, ['model_name', 'pars_resample', 'coly']) # , 'dfy'
     prefix = 'col_sampling'
 
     ######################################################################################
@@ -141,7 +141,7 @@ def pd_sample_imblearn(df=None, col=None, pars=None):
     # model_resample = { 'SMOTE' : SMOTE, 'SMOTEENN': SMOTEENN }[  pars.get("model_name", 'SMOTEENN') ]
     model_resample = locals()[  pars.get("model_name", 'SMOTEENN')  ]
     pars_resample  = pars.get('pars_resample',
-                             {'sampling_strategy' : 'auto', 'random_state':0, 'n_jobs': 2})
+                             {'sampling_strategy' : 'auto', 'random_state':0}) # , 'n_jobs': 2
 
     if 'path_pipeline' in pars :   #### Inference time
         return df, {'col_new': col }
@@ -150,11 +150,11 @@ def pd_sample_imblearn(df=None, col=None, pars=None):
         colX    = col # [col_ for col_ in col if col_ not in coly]
         coly    = pars['coly']
         train_X = df[colX].fillna(method='ffill')
-        train_y = pars['dfy']
+        train_y = df[coly] # pars['dfy']
         gp      = model_resample( **pars_resample)
         X_resample, y_resample = gp.fit_resample(train_X, train_y)
 
-        df2       = pd.DataFrame(X_resample, columns = col, index=train_X.index)
+        df2       = pd.DataFrame(X_resample, columns = col) # , index=train_X.index
         df2[coly] = y_resample
 
     col_new = col
