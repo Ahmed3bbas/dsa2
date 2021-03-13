@@ -202,3 +202,8 @@ mlflow_local.db
 /model_dir
 /ztmp_checkpoint/model_.pth
 /ztmp_checkpoint
+/__pycache__/*.pyc
+/__pycache__/__init__.cpython-39.pyc
+/__pycache__/__init__.cpython-39.pyc
+/example/mfactor/Benchmark
+/example/mfactor

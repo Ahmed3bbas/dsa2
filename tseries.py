@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 """
 ### Usage:
-  python tseries_demand.py  train      --config  config1
-  python tseries_demand.py  predict    --config  config1
+  python tseries.py  train      --config  config1
+  python tseries.py  predict    --config  config1
 
 """
 import warnings, copy, os, sys, pandas as pd
@@ -67,7 +67,7 @@ cols_input_type_1 = {
     ,"colcat" :   ["store", "item" ]
     ,"colnum" :   []
     ,"coltext" :  []
-    ,"coldate" :  ['date']
+    ,"coldate" :  []
 
     ### Specific for time sereis
     ,"col_tseries" :  ['date', 'store', 'item', 'sales']
@@ -96,14 +96,14 @@ def config1() :
     model_dict = {"model_pars": {
         ### LightGBM API model   #######################################
          "model_class": model_class
-        ,"model_pars" : {"objective": "binary",
+        ,"model_pars" : {"objective": "huber",    ### Regression Type Loss
                            "n_estimators": 10,
                            "learning_rate":0.001,
                            "boosting_type":"gbdt",     ### Model hyperparameters
                            "early_stopping_rounds": 5
                         }
 
-        , "post_process_fun" : post_process_fun   ### After prediction  ##########################################
+        , "post_process_fun" : post_process_fun   ### After prediction  #######
         , "pre_process_pars" : {"y_norm_fun" :  pre_process_fun ,  ### Before training  ##########################
 
 
@@ -111,9 +111,9 @@ def config1() :
         "pipe_list": [
         #### Example of Custom processor
         {"uri":  THIS_FILEPATH + "::pd_dsa2_custom",
-            "pars": {'coldate': 'date'},
-            "cols_family": "col_tseries",
-            "cols_out": "tseries_feat",  "type": "" },
+            "pars"        : {'coldate': 'date'},
+            "cols_family" : "col_tseries",
+            "cols_out"    : "tseries_feat",  "type": "" },
 
         ],
                }
@@ -131,10 +131,9 @@ def config1() :
 
 
           ### Model Input :  Merge family of columns   #############################################
-          "cols_model_group": [ "date",
-                               
-                               ### example of custom
-                               "tseries_myfun"
+          "cols_model_group": [                                
+                               ### cols_out of  pd_dsa2_custom
+                               "tseries_feat"
                               ]
 
       #### Model Input : Separate Category Sparse from Continuous : Aribitrary name is OK (!)
@@ -163,7 +162,7 @@ def pd_dsa2_custom(df: pd.DataFrame, col: list=None, pars: dict=None):
     ,{"uri":  THIS_FILEPATH + "::pd_dsa2_custom",   "pars": {'coldate': 'date'}, "cols_family": "coldate",   "cols_out": "coldate_features1",  "type": "" },
 
     """
-    prefix = "tseries_myfun"
+    prefix = "tseries_feat"  ### Used acolumn index
     #### Inference time LOAD previous pars  ###########################################
     from prepro import prepro_load, prepro_save
     prepro, pars_saved, cols_saved = prepro_load(prefix, pars)

@@ -56,8 +56,8 @@ try:
     import pandasvault, tsfel, datetime as dt
 
 except:
-    os.system(" pip install  tsfresh pandasvault tsfel")
-    os.system(" pip install deltapy ")
+    os.system(" pip install  tsfresh pandasvault tsfel --no-deps")
+    os.system(" pip install deltapy --no-deps")
 
     from tsfresh import extract_relevant_features, extract_features
     from tsfresh.utilities.dataframe_functions import roll_time_series

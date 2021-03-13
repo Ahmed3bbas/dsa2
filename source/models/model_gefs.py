@@ -8,7 +8,8 @@ import numpy as np
 import sklearn
 
 try :
-  from gefs import RandomForest
+  ### in repo/model_gefs/  
+  from repo.model_gefs.gefs import RandomForest
 except :
   os.system( " python -m pip install git+https://github.com/arita37/GeFs/GeFs.git@aa32d657013b7cacf62aaad912a9b88110cee5d1  -y ")
   from gefs import RandomForest

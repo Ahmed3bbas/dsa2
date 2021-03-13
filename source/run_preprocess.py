@@ -1,8 +1,11 @@
 # pylint: disable=C0321,C0103,E1221,C0301,E1305,E1121,C0302,C0330
 # -*- coding: utf-8 -*-
 """
-cd analysis
- run preprocess
+  cd analysis
+  run preprocess
+
+  ipython tseries.py  train      --config  config1  --pdb
+
 """
 import warnings
 warnings.filterwarnings('ignore')
@@ -151,25 +154,23 @@ def preprocess(path_train_X="", path_train_y="", path_pipeline_export="", cols_g
         log("#####  coly  ###########################################################################")
         pipe_i       = pipe_list_y[ 0 ]
         pipe_fun     = load_function_uri(pipe_i['uri'])
-        logs("----------df----------\n", df)
         pars                         = pipe_i.get('pars', {})
         pars['path_features_store']  = path_features_store
         pars['path_pipeline_export'] = path_pipeline_export
         df, col_pars                 = pipe_fun(df, cols_group['coly'], pars=pars)   ### coly can remove rows
+        logs("----------dfy----------\n", df)
 
-        logs("----------df----------\n",df)
-        dfi_all['coly']              = df[cols_group['coly'] ]
-        cols_family_all['coly']      = cols_group['coly']
-        save_features(df[cols_group['coly'] ], "coly", path_features_store)  ### already saved
-        save(coly, f'{path_pipeline_export}/coly.pkl')
+    ### save dfy  #####################################################
+    dfi_all['coly']              = df[cols_group['coly'] ]
+    cols_family_all['coly']      = cols_group['coly']
+    save_features(df[cols_group['coly'] ], "coly", path_features_store)  ### already saved
+    save(coly, f'{path_pipeline_export}/coly.pkl')
 
 
     #####  Processors  ###############################################################################
-    dfi_all[ 'coly' ] = df[ cols_group['coly'] ]
     #for colg, colg_list in cols_group.items() :
     #   if colg not in  ['colid']:
     #      dfi_all[colg]   = df[colg_list]   ## colnum colcat, coly
-
 
     for pipe_i in pipe_list_X :
        log("###################", pipe_i, "##########################################################")

@@ -1,18 +1,35 @@
 # pylint: disable=C0321,C0103,C0301,E1305,E1121,C0302,C0330,C0111,W0613,W0611,R1705
 # -*- coding: utf-8 -*-
 """
-ipython source/models/keras_widedeep.py  test  --pdb
 
 
-python keras_widedeep.py  test
-
-pip install Keras==2.4.3
+https://github.com/microsoft/VAEM/blob/main/Main%20Notebook.ipynb
 
 
 """
 import os, pandas as pd, numpy as np, sklearn, copy
 from sklearn.model_selection import train_test_split
 import tensorflow
+import numpy as np
+import tensorflow as tf
+print(tf.__version__)
+from scipy.stats import bernoulli
+import os
+import random
+from random import sample
+from sklearn.feature_selection import mutual_info_regression
+import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
+import pandas as pd
+import sklearn.preprocessing as preprocessing
+from sklearn.metrics import mean_squared_error
+from sklearn.feature_selection import mutual_info_regression, mutual_info_classif
+plt.switch_backend('agg')
+tfd = tf.contrib.distributions
+import utils.process as process
+import json
+import utils.params as params
+import seaborn as sns; sns.set(style="ticks", color_codes=True)
 
 
 ####################################################################################################
@@ -352,5 +369,84 @@ if __name__ == "__main__":
 
 
 
+
+
+def load_dataset()
+    seed = 3000
+    bank_raw = pd.read_csv("./data/bank/bankmarketing_train.csv")
+    print(bank_raw.info())
+    label_column="y"
+    matrix1 = bank_raw.copy()
+
+
+    process.encode_catrtogrial_column(matrix1, ["job"])
+    process.encode_catrtogrial_column(matrix1, ["marital"])
+    process.encode_catrtogrial_column(matrix1, ["education"])
+    process.encode_catrtogrial_column(matrix1, ["default"])
+    process.encode_catrtogrial_column(matrix1, ["housing"])
+    process.encode_catrtogrial_column(matrix1, ["loan"])
+    process.encode_catrtogrial_column(matrix1, ["contact"])
+    process.encode_catrtogrial_column(matrix1, ["month"])
+    process.encode_catrtogrial_column(matrix1, ["day_of_week"])
+    process.encode_catrtogrial_column(matrix1, ["poutcome"])
+    process.encode_catrtogrial_column(matrix1, ["y"])
+
+    Data = ((matrix1.values).astype(float))[0:,:]
+
+
+    # the data will be mapped to interval [min_Data,max_Data]. Usually this will be [0,1] but you can also specify other values.
+    max_Data = 0.7 
+    min_Data = 0.3 
+    # list of categorical variables
+    list_cat = np.array([0,1,2,3,4,5,6,7])
+    # list of numerical variables
+    list_flt = np.array([8,9,10,11,12,13,14,15,16,17,18,19,20])
+    # among numerical variables, which ones are discrete. This is referred as continuous-discrete variables in Appendix C.1.3 in our paper.
+    # Examples include variables that take integer values, for example month, day of week, number of custumors etc. Other examples include numerical variables that are recorded on a discrete grid (for example salary). 
+    list_discrete = np.array([8,9])
+
+
+
+
+    # sort the variables in the data matrix, so that categorical variables appears first. The resulting data matrix is Data_sub
+    list_discrete_in_flt = (np.in1d(list_flt, list_discrete).nonzero()[0])
+    list_discrete_compressed = list_discrete_in_flt + len(list_cat)
+
+    if len(list_flt)>0 and len(list_cat)>0:
+        list_var = np.concatenate((list_cat,list_flt))
+    elif len(list_flt)>0:
+        list_var = list_flt
+    else:
+        list_var = list_cat
+    Data_sub = Data[:,list_var]
+    dic_var_type = np.zeros(Data_sub.shape[1])
+    dic_var_type[0:len(list_cat)] = 1
+
+    # In this notebook we assume the raw data matrix is fully observed
+    Mask = np.ones(Data_sub.shape)
+    # Normalize/squash the data matrix
+    Data_std = (Data_sub - Data_sub.min(axis=0)) / (Data_sub.max(axis=0) - Data_sub.min(axis=0))
+    scaling_factor = (Data_sub.max(axis=0) - Data_sub.min(axis=0))/(max_Data - min_Data)
+    Data_sub = Data_std * (max_Data - min_Data) + min_Data
+
+    # decompress categorical data into one hot representation
+    Data_cat = Data[:,list_cat].copy()
+    Data_flt = Data[:,list_flt].copy()
+    Data_compressed = np.concatenate((Data_cat,Data_flt),axis = 1)
+    Data_decompressed, Mask_decompressed, cat_dims, DIM_FLT = process.data_preprocess(Data_sub,Mask,dic_var_type)
+    Data_train_decompressed, Data_test_decompressed, mask_train_decompressed, mask_test_decompressed,mask_train_compressed, mask_test_compressed,Data_train_compressed, Data_test_compressed = train_test_split(
+            Data_decompressed, Mask_decompressed,Mask,Data_compressed,test_size=0.1, random_state=rs)
+
+    list_discrete = list_discrete_in_flt + (cat_dims.sum()).astype(int)
+
+    Data_decompressed = np.concatenate((Data_train_decompressed, Data_test_decompressed), axis=0)
+    Data_train_orig = Data_train_decompressed.copy()
+    Data_test_orig = Data_test_decompressed.copy()
+
+    # Note that here we have added some noise to continuous-discrete variables to help training. Alternatively, you can also disable this by changing the noise ratio to 0.
+    Data_noisy_decompressed,records_d, intervals_d = process.noisy_transform(Data_decompressed, list_discrete, noise_ratio = 0.99)
+    noise_record = Data_noisy_decompressed - Data_decompressed
+    Data_train_noisy_decompressed = Data_noisy_decompressed[0:Data_train_decompressed.shape[0],:]
+    Data_test_noisy_decompressed = Data_noisy_decompressed[Data_train_decompressed.shape[0]:,:]
 
 

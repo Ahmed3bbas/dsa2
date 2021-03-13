@@ -392,21 +392,20 @@ def get_dataset_tuple(Xtrain, cols_type_received, cols_ref, split=False):
         False:  return same input of data
     :return:
     """
-    if split:
-        if len(cols_ref) < 1 :
-            return Xtrain
+    if len(cols_ref) <= 1  or not split :
+        return Xtrain
         
-        Xtuple_train = []
-        for cols_groupname in cols_ref :
-            assert cols_groupname in cols_type_received, "Error missing colgroup in config data_pars[cols_model_type] "
-            cols_i = cols_type_received[cols_groupname]
-            Xtuple_train.append( Xtrain[cols_i] )
+    Xtuple_train = []
+    for cols_groupname in cols_ref :
+        assert cols_groupname in cols_type_received, "Error missing colgroup in config data_pars[cols_model_type] "
+        cols_i = cols_type_received[cols_groupname]
+        Xtuple_train.append( Xtrain[cols_i] )
 
-        if len(cols_ref) == 1 :
-            return Xtuple_train[0]  ### No tuple
-        else :
-            return Xtuple_train
-    return Xtrain
+    #if len(cols_ref) == 1 :
+    #    return Xtuple_train[0]  ### No tuple
+    #else :
+    return Xtuple_train
+
 
 
 def get_dataset(data_pars=None, task_type="train", **kw):

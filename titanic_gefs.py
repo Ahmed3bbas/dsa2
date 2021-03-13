@@ -2,13 +2,13 @@
 # -*- coding: utf-8 -*-
 """
 ### Usage:
-  python titanic_gefs.py  train      --config  config1
-  python titanic_gefs.py  predict    --config  config1
+  ipython titanic_gefs.py  train      --config  config1  --pdb
+  ipython titanic_gefs.py  predict    --config  config1
 
-python  titanic_gefs.py  data_profile
-python  titanic_gefs.py  preprocess  --nsample 100
-python  titanic_gefs.py  train       --nsample 200
-python  titanic_gefs.py  predict
+ipython  titanic_gefs.py  data_profile
+ipython  titanic_gefs.py  preprocess  --nsample 100
+ipython  titanic_gefs.py  train       --nsample 200
+ipython  titanic_gefs.py  predict
 
 
 """
