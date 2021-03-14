@@ -280,7 +280,12 @@ def eval(data_pars=None, compute_pars=None, out_pars=None, **kw):
 
     data_pars['train'] = True
     Xval, yval         = get_dataset(data_pars, task_type="eval")
-    Xnew               = transform(Xval, data_pars, compute_pars, out_pars)
+
+    if model.model_pars['model_class'] in IMBLEARN_MODELS:
+        Xnew, ynew     = transform((Xval, yval), data_pars, compute_pars, out_pars)
+    else:
+        Xnew            = transform(Xval, data_pars, compute_pars, out_pars)
+    
     # log(data_pars)
     mpars = compute_pars.get("metrics_pars", {'aggregate': True})
 
@@ -294,6 +299,9 @@ def eval(data_pars=None, compute_pars=None, out_pars=None, **kw):
 def transform(Xpred=None, data_pars={}, compute_pars={}, out_pars={}, **kw):
     """ Geenrate Xtrain  ----> Xtrain_new
     :param Xpred:
+        Xpred ==> None            if you want to get generated samples by by SDV models
+              ==> tuple of (x, y) if you want to resample dataset with IMBLEARN models
+              ==> dataframe       if you want to transorm by sklearn models like TruncatedSVD
     :param data_pars:
     :param compute_pars:
     :param out_pars:
@@ -309,19 +317,38 @@ def transform(Xpred=None, data_pars={}, compute_pars={}, out_pars={}, **kw):
 
     #######
     if Xpred is None:
-        Xpred_tuple = get_dataset(data_pars, task_type="predict")
+        if model.model_pars['model_class'] in IMBLEARN_MODELS:
+            Xpred_tuple, y = get_dataset(data_pars, task_type="eval")
+
+        else:
+            Xpred_tuple = get_dataset(data_pars, task_type="predict")
+
     else :
         cols_type         = data_pars['cols_model_type2']
         cols_ref_formodel = cols_type
         split = kw.get("split", False)
-        Xpred_tuple       = get_dataset_tuple(Xpred, cols_type, cols_ref_formodel, split)
+
+        if model.model_pars['model_class'] in IMBLEARN_MODELS:
+            if isinstance(Xpred, tuple) and len(Xpred) == 2:
+                x, y = Xpred
+                Xpred_tuple = get_dataset_tuple(x, cols_type, cols_ref_formodel, split)
+
+            else:
+                raise  Exception(f"IMBLEARN MODELS need to pass x, y to resample,you have to pass them as tuple => Xpred = (x, y)")
+
+        else:
+            Xpred_tuple       = get_dataset_tuple(Xpred, cols_type, cols_ref_formodel, split)
+
 
     Xnew= None
     if model.model_pars['model_class'] in SDV_MODLES :
        Xnew = model.model.sample(compute_pars.get('n_sample_generation', 100) )
 
-    elif model.model_pars['model_class'] in ['SMOTE', ] :   ### Sampler
-       Xnew = model.model.resample( Xpred_tuple, **compute_pars.get('compute_pars', {}) )
+    elif model.model_pars['model_class'] in IMBLEARN_MODELS :   ### Sampler
+       # fit_resample(x ,y ) ==> resample dataset, it returns x,y after resampling
+       # Xnew ==> tuple(x, y) after resmapling
+       Xnew = model.model.fit_resample( Xpred_tuple, y, **compute_pars.get('compute_pars', {}) )
+
 
     else :
        Xnew = model.model.transform( Xpred_tuple, **compute_pars.get('compute_pars', {}) )
@@ -560,21 +587,22 @@ def test():
 
 
 
-    log("test 2 --> CTGAN")
-    model_pars = {'model_class': 'CTGAN',
-                  'model_pars': {
-                     ## CTGAN
-                     'primary_key': colid,
-                     'epochs': 1,
-                     'batch_size' :100,
-                     'generator_dim' : (256, 256, 256),
-                     'discriminator_dim' : (256, 256, 256)
-                },
-                }
-    compute_pars = { 
-        'compute_pars' : {}
-        }
-    test_helper(model_pars, data_pars, compute_pars)
+    
+    # log("test 2 --> CTGAN")
+    # model_pars = {'model_class': 'CTGAN',
+    #               'model_pars': {
+    #                  ## CTGAN
+    #                  'primary_key': colid,
+    #                  'epochs': 1,
+    #                  'batch_size' :100,
+    #                  'generator_dim' : (256, 256, 256),
+    #                  'discriminator_dim' : (256, 256, 256)
+    #             },
+    #             }
+    # compute_pars = { 
+    #     'compute_pars' : {}
+    #     }
+    # test_helper(model_pars, data_pars, compute_pars)
 
 
     # log("test 3 --> TVAE")
@@ -608,6 +636,18 @@ def test():
     #     'compute_pars' : {}
     #     }
     # test_helper(model_pars, data_pars, compute_pars)
+
+    log("test 6 --> SMOTE")
+    model_pars = {'model_class': 'SMOTE',
+                  'model_pars': {
+                     ## SMOTE
+                },
+                }
+    compute_pars = { 
+        'compute_pars' : {}
+        }
+    test_helper(model_pars, data_pars, compute_pars)
+
 
 
 def test_helper(model_pars, data_pars, compute_pars):
