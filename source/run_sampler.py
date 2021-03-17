@@ -10,7 +10,7 @@ activate py36 && python source/run_train.py  run_train   --n_sample 100  --confi
 import warnings
 warnings.filterwarnings('ignore')
 import sys, os, json, importlib
-
+import pandas as pd
 ####################################################################################################
 #### Add path for python import
 sys.path.append( os.path.dirname(os.path.abspath(__file__)) + "/")
@@ -26,6 +26,8 @@ DEBUG = True
 from util_feature import   load, save_list, load_function_uri, save
 from run_preprocess import  preprocess, preprocess_load
 
+
+SUPERVISED_MODELS = ['SMOTE', 'SMOTEENN', 'SMOTETomek', 'NearMiss']
 
 """
 ### bug with logger
@@ -150,6 +152,7 @@ def train(model_dict, dfX, cols_family, post_process_fun):
     data_pars                = model_dict['data_pars']
     model_name, model_path   = model_pars['model_class'], model_dict['global_pars']['path_train_model']
     metric_list              = compute_pars['metric_list']
+    model_file               = model_pars.get('model_file',"model_sampler")
 
     assert  'cols_model_type2' in data_pars, 'Missing cols_model_type2, split of columns by data type '
     log2(data_pars['cols_model_type2'])
@@ -175,11 +178,17 @@ def train(model_dict, dfX, cols_family, post_process_fun):
                           'Xval'   : dfX[colsX].iloc[ival:, :],
                           'yval'   : dfX[coly].iloc[ival:],
                           }
-
+    
+    data_pars['eval'] = {'X'   : dfX[colsX].iloc[ival:, :],
+                          'y'   : dfX[coly].iloc[ival:],
+                          }
 
     log("#### Init, Train ############################################################")
     # from config_model import map_model    
-    modelx = map_model(model_name)    
+    if len(model_file) == 0:
+        modelx = map_model(model_name)
+    else:
+        modelx = map_model(model_file +":"+model_name)    
     log(modelx)
     modelx.reset()
     modelx.init(model_pars, compute_pars=compute_pars)
@@ -193,8 +202,12 @@ def train(model_dict, dfX, cols_family, post_process_fun):
 
 
     log("#### Transform ################################################################")
-    dfX2 = modelx.transform(dfX[colsX], compute_pars=compute_pars)
-    dfX2.index = dfX.index
+    if model_name in SUPERVISED_MODELS:
+        dfX2, y = modelx.transform((dfX[colsX], dfX[coly]),data_pars=data_pars, compute_pars=compute_pars)
+        dfX2 = pd.DataFrame(dfX2, columns = colsX)
+    else:
+        dfX2 = modelx.transform(dfX[colsX], data_pars=data_pars, compute_pars=compute_pars)
+    # dfX2.index = dfX.index
 
     for coli in dfX2.columns :
        dfX2[coli]            = dfX2[coli].apply(lambda  x : post_process_fun(x) )
@@ -204,11 +217,13 @@ def train(model_dict, dfX, cols_family, post_process_fun):
 
     log("#### Metrics ###############################################################")
     from util_feature import  metrics_eval
-    metrics_test = metrics_eval(metric_list,
-                                ytrue       = dfX[coly].iloc[ival:],
-                                ypred       = dfX[coly + '_pred'].iloc[ival:],
-                                ypred_proba = ypred_proba_val )
-    stats = {'metrics_test' : metrics_test}
+
+    # metrics_test = metrics_eval(metric_list,
+    #                             ytrue       = dfX[coly].iloc[ival:],
+    #                             ypred       = dfX[coly + '_pred'].iloc[ival:],
+    #                             ypred_proba = ypred_proba_val )
+    # stats = {'metrics_test' : metrics_test}
+    stats = modelx.eval(data_pars=data_pars, compute_pars=compute_pars)
     log(stats)
 
 
