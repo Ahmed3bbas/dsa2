@@ -2,27 +2,17 @@
 # -*- coding: utf-8 -*-
 """
 Genreate  train_data  ---> New train data by sampling
-
 cd source/
 python source/model_sampler.py test
-
-
 Transformation for ALL Columns :
    Increase samples, Reduce Samples.
-
 Main isssue is the number of rows change  !!!!
   cannot merge with others
-
   --> store as train data
-
   train data ---> new train data
-
   Transformation with less rows !
-
 2 usage :
     Afte preprocessing, over sample, under-sample.
-
-
 """
 import os, sys
 sys.path.append( os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + "/")
@@ -828,8 +818,6 @@ def pd_augmentation_sdv(df, col=None, pars={})  :
 # pylint: disable=C0321,C0103,E1221,C0301,E1305,E1121,C0302,C0330
 # -*- coding: utf-8 -*-
 """
-
-
 """
 import warnings
 warnings.filterwarnings('ignore')
@@ -1114,8 +1102,6 @@ def test():
     
     
 """
-
-
 def pd_generic_transform(df, col=None, pars={}, model=None)  :
  
      Transform or Samples using  model.fit()   model.sample()  or model.transform()
@@ -1146,7 +1132,6 @@ def pd_generic_transform(df, col=None, pars={}, model=None)  :
                  log('model saved at: ' + path_model_save  )
             except:
                  log('saving model failed: ', path_model_save)
-
     log('##### Generating Samples/transform #############')    
     if model_method == 'sample' :
         n_samples =pars.get('n_samples', max(1, 0.10 * len(df) ) )
@@ -1163,10 +1148,4 @@ def pd_generic_transform(df, col=None, pars={}, model=None)  :
         log('###### df transform save on disk', pars['path_newdata'] )    
     
     return model, df_new, col, pars
-
-
-
 """
-    
-    
-    

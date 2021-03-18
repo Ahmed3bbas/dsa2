@@ -52,7 +52,7 @@ def init(*kw, **kwargs):
     session = None
 
 
-#from repo.vaem.model import model as Modelcustom
+# LOAD MODEL
 from repo.vaem import model_main as Modelcustom
 
 """

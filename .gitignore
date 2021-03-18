@@ -207,3 +207,4 @@ mlflow_local.db
 /__pycache__/__init__.cpython-39.pyc
 /example/mfactor/Benchmark
 /example/mfactor
+/source/models/repo/TruncatedGaussianMixtureVAE/ztmp_checkpoint/model_.pth

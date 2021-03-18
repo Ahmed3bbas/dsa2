@@ -1,15 +1,20 @@
 # pylint: disable=C0321,C0103,C0301,E1305,E1121,C0302,C0330,C0111,W0613,W0611,R1705
 # -*- coding: utf-8 -*-
 """
+python model_gef.py test
+
+
+
 """
-import os
+import os, sys
 import pandas as pd
 import numpy as np
 import sklearn
 
 try :
   ### in repo/model_gefs/  
-  from repo.model_gefs.gefs import RandomForest
+  sys.path.append( os.path.dirname(os.path.abspath(__file__)) + "/repo/model_gefs/" )
+  from gefs import RandomForest
 except :
   os.system( " python -m pip install git+https://github.com/arita37/GeFs/GeFs.git@aa32d657013b7cacf62aaad912a9b88110cee5d1  -y ")
   from gefs import RandomForest
@@ -17,9 +22,6 @@ except :
 
 ####################################################################################################
 VERBOSE = True
-
-
-# MODEL_URI = get_model_uri(__file__)
 
 def log(*s):
     print(*s, flush=True)
@@ -82,10 +84,7 @@ def eval(data_pars=None, compute_pars=None, out_pars=None, **kw):
     global model, session
     data_pars['train'] = True
     Xval, yval        = get_dataset(data_pars, task_type="eval")
-    # ypred      = model.model.predict(Xval)
     ypred, ypred_prob = predict(Xval, data_pars, compute_pars, out_pars)
-
-    # log(data_pars)
     mpars = compute_pars.get("metrics_pars", {'metric_name': 'auc'})
 
     scorer = {
@@ -160,36 +159,6 @@ def load_info(path=""):
             dd[key] = obj
     return dd
 
-
-def preprocess(prepro_pars):
-    if prepro_pars['type'] == 'test':
-        from sklearn.datasets import make_classification
-        from sklearn.model_selection import train_test_split
-
-        X, y = make_classification(n_features=10, n_redundant=0, n_informative=2,
-                                   random_state=1, n_clusters_per_class=1)
-
-        # log(X,y)
-        Xtrain, Xtest, ytrain, ytest = train_test_split(X, y)
-        return Xtrain, ytrain, Xtest, ytest
-
-    if prepro_pars['type'] == 'train':
-        from sklearn.model_selection import train_test_split
-        df = pd.read_csv(prepro_pars['path'])
-        dfX = df[prepro_pars['colX']]
-        dfy = df[prepro_pars['coly']]
-        Xtrain, Xtest, ytrain, ytest = train_test_split(dfX.values, dfy.values,
-                                                        stratify=dfy.values, test_size=0.1)
-        return Xtrain, ytrain, Xtest, ytest
-
-    else:
-        df = pd.read_csv(prepro_pars['path'])
-        dfX = df[prepro_pars['colX']]
-
-        Xtest, ytest = dfX, None
-        return None, None, Xtest, ytest
-
-
 ####################################################################################################
 ############ Do not change #########################################################################
 def get_dataset(data_pars=None, task_type="train", **kw):
@@ -218,28 +187,6 @@ def get_dataset(data_pars=None, task_type="train", **kw):
 
     raise Exception(f' Requires  Xtrain", "Xtest", "ytrain", "ytest" ')
 
-
-def get_params_sklearn(deep=False):
-    return model.model.get_params(deep=deep)
-
-
-def get_params(param_pars={}, **kw):
-    import json
-    # from jsoncomment import JsonComment ; json = JsonComment()
-    pp          = param_pars
-    choice      = pp['choice']
-    config_mode = pp['config_mode']
-    data_path   = pp['data_path']
-
-    if choice == "json":
-        cf = json.load(open(data_path, mode='r'))
-        cf = cf[config_mode]
-        return cf['model_pars'], cf['data_pars'], cf['compute_pars'], cf['out_pars']
-
-    else:
-        raise Exception(f"Not support choice {choice} yet")
-
-        
         
 ####################################################################################################        
 ############ Custom Code ############################################################################
@@ -284,9 +231,8 @@ def pd_colcat_get_catcount(df, classcol=None, continuous_ids=[]):
     return ncat
 
                                      
-def test_model():
+def test():
     # Auxiliary functions
-
     def get_stats(data, ncat=None):
         """
             Compute univariate statistics for continuous variables. Parameters
@@ -359,7 +305,7 @@ def test_model():
 
                                      
     # Load toy dataset
-    df_white   = pd.read_csv('../../data/input/wine-quality/raw/winequality-white.csv', sep=';').values
+    df_white   = pd.read_csv('https://raw.githubusercontent.com/arita37/GeFs/master/data/winequality_white.csv', sep=';').values
     ncat_white = pd_colcat_get_catcount(df_white, classcol=-1)
     ncat_white[-1] = 2
 
@@ -382,17 +328,10 @@ def test_model():
 if __name__ == "__main__":
     import fire
     fire.Fire()
+
                                      
 """
 python model_gef.py test_model
-
-
-"""
-                                     
-                                     
-                                     
-                                     
-"""
 
     def learncats(data, classcol=None, continuous_ids=[]):
   

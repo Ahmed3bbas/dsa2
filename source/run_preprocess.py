@@ -11,7 +11,6 @@ import warnings
 warnings.filterwarnings('ignore')
 import sys, gc, os, sys, json, copy, pandas as pd
 
-
 ####################################################################################################
 #### Add path for python import
 sys.path.append( os.path.dirname(os.path.abspath(__file__)) + "/")
@@ -19,7 +18,7 @@ sys.path.append( os.path.dirname(os.path.abspath(__file__)) + "/")
 
 #### Root folder analysis
 root = os.path.abspath(os.getcwd()).replace("\\", "/") + "/"
-print(root)
+# print(root)
 
 #### Debuging state (Ture/False)
 DEBUG_=True
@@ -78,7 +77,6 @@ def load_features(name, path):
 
 def model_dict_load(model_dict, config_path, config_name, verbose=True):
     """
-
     :param model_dict:
     :param config_path:
     :param config_name:
@@ -134,7 +132,8 @@ def preprocess(path_train_X="", path_train_y="", path_pipeline_export="", cols_g
     pipe_list_X  = [ task for task in pipe_list  if task.get('type', '')  not in ['coly', 'filter']  ]
     pipe_list_y  = [ task for task in pipe_list  if task.get('type', '')   in ['coly']  ]
     pipe_filter  = [ task for task in pipe_list  if task.get('type', '')   in ['filter']  ]
-    ##### Load data #################################################################################
+
+    log("##### Load data ######################################################################")
     df = load_dataset(path_train_X, path_train_y, colid, n_sample= n_sample)
 
 
@@ -168,10 +167,6 @@ def preprocess(path_train_X="", path_train_y="", path_pipeline_export="", cols_g
 
 
     #####  Processors  ###############################################################################
-    #for colg, colg_list in cols_group.items() :
-    #   if colg not in  ['colid']:
-    #      dfi_all[colg]   = df[colg_list]   ## colnum colcat, coly
-
     for pipe_i in pipe_list_X :
        log("###################", pipe_i, "##########################################################")
        pipe_fun    = load_function_uri(pipe_i['uri'])    ### Load the code definition  into pipe_fun
@@ -189,23 +184,19 @@ def preprocess(path_train_X="", path_train_y="", path_pipeline_export="", cols_g
            pars['colid']           = colid
            pars['colcross_single'] = cols_group.get('colcross', [])
 
-       #elif col_type == 'add_coly':
-       #    log( 'add_coly genetic', cols_group['coly'] )
+
        pars['coly'] = cols_group['coly']
        pars['dfy']  = dfi_all[ 'coly' ]  ### add dfy by default
 
        ### Input columns or prevously Computed Columns ( colnum_bin ), prevent duplicates
        cols_list  = cols_group[cols_name] if cols_name in cols_group else list(dfi_all[cols_name].columns)
        df_        = df[ cols_list]        if cols_name in cols_group else dfi_all[cols_name]
-       #cols_list  = list(dfi_all[cols_name].columns)
-       #df_        = dfi_all[cols_name]
 
        dfi, col_pars = pipe_fun(df_, cols_list, pars= pars)
 
        ## Check Index are matching for Later JOIN: Issues with Sampler, re-index !!!!!!
        if 'sampler' not in pipe_i['uri'] :
           dfi.index = df_.index
-          # assert dfi.index == df_.index, "df.index are not matching"
 
 
        ### Concatenate colnum, colnum_bin into cols_family_all , dfi_all  ###########################
@@ -218,7 +209,6 @@ def preprocess(path_train_X="", path_train_y="", path_pipeline_export="", cols_g
 
     ######  Merge AlL int dfXy  ##################################################################
     dfXy = df[ [coly] + colnum + colcat ]
-    #dfXy = df[ [coly]  ]
 
     for t in dfi_all.keys():
         if t not in [ 'coly', 'colnum', 'colcat' ] :
@@ -226,17 +216,15 @@ def preprocess(path_train_X="", path_train_y="", path_pipeline_export="", cols_g
     save_features(dfXy, 'dfX', path_features_store)
 
 
-    colXy = list(dfXy.columns)
-    colXy.remove(coly)    ##### Only X columns
+    colX = list(dfXy.columns)
+    colX.remove(coly)    ##### Only X columns
     if len(colid)>0:
         cols_family_all['colid']=colid
-    cols_family_all['colX'] = colXy
+    cols_family_all['colX'] = colX
 
 
     ####  Cols group for model input  ###########################################################
-
-
-    save(colXy,            f'{path_pipeline_export}/colsX.pkl' )
+    save(colX,             f'{path_pipeline_export}/colsX.pkl' )
     save(cols_family_all,  f'{path_pipeline_export}/cols_family.pkl' )
 
     ###### Return values  #######################################################################
@@ -291,11 +279,6 @@ def preprocess_inference(df, path_pipeline="data/pipeline/pipe_01/", preprocess_
 
 
     #####  Processors  #############################################################################
-    #for colg, colg_list in cols_group.items() :
-    #   if colg not in  ['colid', 'coly' ]:
-    #      dfi_all[colg]   = df[colg_list]   ## colnum colcat, coly
-
-
     for pipe_i in pipe_list_X :
        log("###################", pipe_i, "#######################################################")
        pipe_fun    = load_function_uri(pipe_i['uri'])    ### Load the code definition  into pipe_fun
@@ -308,8 +291,6 @@ def preprocess_inference(df, path_pipeline="data/pipeline/pipe_01/", preprocess_
 
        cols_list  = cols_group[cols_name]       if cols_name in cols_group else  cols_family_full[cols_name]
        df_        = df[ cols_group[cols_name]]  if cols_name in cols_group else  dfi_all[cols_name]
-       # cols_list  = list(dfi_all[cols_name].columns)
-       # df_        = dfi_all[cols_name]
        logs(df_, cols_list)
 
        if col_type == 'cross':
@@ -318,8 +299,11 @@ def preprocess_inference(df, path_pipeline="data/pipeline/pipe_01/", preprocess_
            pars['colid']           = colid
            pars['colcross_single'] = cols_group.get('colcross', [])
 
-
        dfi, col_pars             = pipe_fun(df_, cols_list, pars= pars)
+
+       ## Check Index are matching for Later JOIN: Issues with Sampler, re-index !!!!!!
+       if 'sampler' not in pipe_i['uri'] :
+          dfi.index = df_.index
 
        ### Concatenate colnum, colnum_bin into cols_family_all
        for colj, colist in  col_pars['cols_new'].items() :

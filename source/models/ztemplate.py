@@ -23,7 +23,8 @@ def log2(*s):
 
 ####################################################################################################
 #### Your model input
-cols_ref_formodel = ['cols_group_1', 'cols_group_2', 'cols_group_3']
+cols_ref_formodel = ['cols_group_1_name' ]
+
 
 
 class Modelcustom(object):
@@ -74,7 +75,8 @@ def init(*kw, **kwargs):
 
 class Model(object):
     """
-           Generic Wrapper Class
+           Generic Wrapper Class for Modelcustom
+           Actual model is in Model.model
 
     """
     def __init__(self, model_pars=None, data_pars=None, compute_pars=None):
@@ -87,26 +89,30 @@ class Model(object):
             model_class = model_pars['model_class']  #
             mdict       = model_pars['model_pars']
 
+
             ######### Size the model based on data size  ##############
             mdict['model_pars']['n_columns']  = data_pars['n_columns']
 
 
+
+
+
             ######### Create Model Instance  #########################
             self.model  = Modelcustom(**mdict)
-            log2(model_class, self.model)
-            self.model.summary()
+            log2(self.model)
+
 
 
 def fit(data_pars=None, compute_pars=None, out_pars=None, **kw):
-    """
+    """ Train the model.model
     """
     global model, session
-    session = None  # Session type for compute
 
     Xtrain_tuple, ytrain, Xtest_tuple, ytest = get_dataset(data_pars, task_type="train")
     cpars          = copy.deepcopy( compute_pars.get("compute_pars", {}))   ## issue with pickle
-    ...
+    
     model.model.fit(Xtrain, ytrain, **cpars)
+
 
 
 
@@ -114,20 +120,25 @@ def fit(data_pars=None, compute_pars=None, out_pars=None, **kw):
 def predict(Xpred=None, data_pars=None, compute_pars={}, out_pars={}, **kw):
     global model, session
     if Xpred is None:
-        # data_pars['train'] = False
         Xpred_tuple = get_dataset(data_pars, task_type="predict")
-
     else :
-        cols_type   = data_pars['cols_model_type2']  ##
+        cols_type   = data_pars['cols_model_type2'] 
         Xpred_tuple = get_dataset_tuple(Xpred, cols_type, cols_ref_formodel)
 
     log2(Xpred_tuple)
     ypred = model.model.predict(Xpred_tuple )
 
+    ###### Add Probability 
     ypred_proba = None  ### No proba
     if compute_pars.get("probability", False):
          ypred_proba = model.model.predict_proba(Xpred)
+
+    #####  Return prediction
     return ypred, ypred_proba
+
+
+
+
 
 
 def reset():
@@ -140,42 +151,11 @@ def save(path=None, info=None):
     global model, session
     os.makedirs(path, exist_ok=True)
 
-    model.model.save(f"{path}/model_keras.h5")
-
-    modelx = Model()  # Empty model  Issue with pickle
-    modelx.model_pars   = model.model_pars
-    modelx.data_pars    = model.data_pars
-    modelx.compute_pars = model.compute_pars
-    # log('model', modelx.model)
-    pickle.dump(modelx, open(f"{path}/model.pkl", mode='wb'))  #
-
-    pickle.dump(info, open(f"{path}/info.pkl", mode='wb'))  #
-
-
+#
 def load_model(path=""):
     global model, session
     import dill as pickle
 
-    model_keras = keras.models.load_model(path + '/model_keras.h5' )
-    model0      = pickle.load(open(f"{path}/model.pkl", mode='rb'))
-
-    model = Model()  # Empty model
-    model.model = model_keras
-    model.model_pars = model0.model_pars
-    model.compute_pars = model0.compute_pars
-    session = None
-    return model, session
-
-
-def load_info(path=""):
-    import cloudpickle as pickle, glob
-    dd = {}
-    for fp in glob.glob(f"{path}/*.pkl"):
-        if not "model.pkl" in fp:
-            obj = pickle.load(open(fp, mode='rb'))
-            key = fp.split("/")[-1]
-            dd[key] = obj
-    return dd
 
 
 
@@ -188,7 +168,7 @@ def get_dataset_tuple(Xtrain, cols_type_received, cols_ref):
     :param cols_ref:
     :return:
     """
-    if len(cols_ref) < 1 :
+    if len(cols_ref) <= 1 :  ## No Tuple
         return Xtrain
 
     Xtuple_train = []
@@ -197,10 +177,8 @@ def get_dataset_tuple(Xtrain, cols_type_received, cols_ref):
         cols_i = cols_type_received[cols_groupname]
         Xtuple_train.append( Xtrain[cols_i] )
 
-    if len(cols_ref) == 1 :
-        return Xtuple_train[0]  ### No tuple
-    else :
-        return Xtuple_train
+
+    return Xtuple_train
 
 
 def get_dataset(data_pars=None, task_type="train", **kw):
@@ -209,12 +187,13 @@ def get_dataset(data_pars=None, task_type="train", **kw):
     """
     # log(data_pars)
     data_type = data_pars.get('type', 'ram')
-    cols_ref  = cols_ref_formodel
+    cols_ref  = cols_ref_formodel   ### Column GROUP defined for the model
 
     if data_type == "ram":
         # cols_ref_formodel = ['cols_cross_input', 'cols_deep_input', 'cols_deep_input' ]
-        ### dict  colgroup ---> list of colname
-        cols_type_received     = data_pars.get('cols_model_type2', {} )  ##3 Sparse, Continuous
+        ### Defined source/run_train.py ---> data_pars ---> get_dataset
+        ### ##3 Sparse, Continuous
+        cols_type_received     = data_pars.get('cols_model_type2', {} )  
 
         if task_type == "predict":
             d = data_pars[task_type]
