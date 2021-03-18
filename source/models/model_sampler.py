@@ -861,7 +861,7 @@ def log_pd(df, *s, n=0, m=1):
     print(sjump,  df.head(n), flush=True)
 
 
-from util_feature import  save, load_function_uri, load, save_features, params_check
+from util_feature import load_function_uri, load, save_features, params_check
 ####################################################################################################
 ####################################################################################################
 def pd_export(df, col, pars):
