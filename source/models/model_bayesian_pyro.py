@@ -2,47 +2,58 @@
 # -*- coding: utf-8 -*-
 """
 
+python model_bayesian_pyro.py      test
+
+
 """
-import os
-from functools import partial
-import numpy as np
-import pandas as pd
-import seaborn as sns
+import os,  numpy as np, pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_squared_error, r2_score
-from sklearn.linear_model import Ridge
-import sklearn
-
-from torch import nn
-from pyro.nn import PyroModule
-import logging
-
-import torch
-import matplotlib.pyplot as plt
-import seaborn as sns
-from torch.distributions import constraints
 
 import pyro
 import pyro.distributions as dist
-import pyro.optim as optim
 from pyro.infer import SVI, Trace_ELBO
 from pyro.infer.autoguide import AutoDiagonalNormal
-from pyro.nn import PyroSample
+from pyro.nn import PyroModule, PyroSample
+import torch
+from torch import nn
 
 ####################################################################################################
 VERBOSE = False
 
-
-
-# MODEL_URI = get_model_uri(__file__)
-
-
-# from mlmodels.util import log, path_norm, get_model_uri
 def log(*s):
     print(*s, flush=True)
 
 
+####################################################################################################
+class BayesianRegression(PyroModule):
+    def __init__(self, X_dim:int=17, y_dim:int=1):
+        super().__init__()
+        self.linear = PyroModule[nn.Linear](X_dim, y_dim)
+
+        # W of shape (y_width, input_width)
+        self.linear.weight = PyroSample(dist.Normal(0., 1.).expand([y_dim, X_dim]).to_event(2))
+        # bias (y_width, 1)
+        self.linear.bias   = PyroSample(dist.Normal(0., 10.).expand([y_dim]).to_event(1))
+
+    def forward(self, x, y=None):
+        sigma = pyro.sample("sigma", dist.Uniform(0., 10.))
+        mean = self.linear(x).squeeze(-1)
+        with pyro.plate("data", x.shape[0]):
+            obs = pyro.sample("obs", dist.Normal(mean, sigma), obs=y)
+        return mean
+
+# Supported Models
+MODEL_LIST = [ BayesianRegression ]
+
+
+# Map model_name to class : [model_bayesian_pyro.py::BayesianRegression] -> Model Class
+def model_class_loader(m_name='BayesianRegression', class_list:list=None):
+  class_list_dict = { myclass.__name__ : myclass for myclass in class_list }
+  class_name = m_name.split("::")[-1]
+  return class_list_dict.get(class_name)
+
+####################################################################################################
 ####################################################################################################
 global model, session
 
@@ -61,25 +72,16 @@ class Model(object):
             self.model = None
         else:
             ###############################################################
-            class BayesianRegression(PyroModule):
-                def __init__(self, in_features, out_features):
-                    super().__init__()
-                    self.linear = PyroModule[nn.Linear](in_features, out_features)
-                    self.linear.weight = PyroSample(dist.Normal(0., 1.).expand([out_features, in_features]).to_event(2))
-                    self.linear.bias = PyroSample(dist.Normal(0., 10.).expand([out_features]).to_event(1))
+            # Load Model Class
+            model_class = model_class_loader(model_pars['model_class'], MODEL_LIST ) 
+            
+            mpars    = model_pars.get('model_pars', {})  ## default already in model
 
-                def forward(self, x, y=None):
-                    sigma = pyro.sample("sigma", dist.Uniform(0., 10.))
-                    mean = self.linear(x).squeeze(-1)
-                    with pyro.plate("data", x.shape[0]):
-                        obs = pyro.sample("obs", dist.Normal(mean, sigma), obs=y)
-                    return mean
-
-            input_width = model_pars['model_pars']['input_width']
-            y_width = model_pars['model_pars'].get('y_width', 1)
-            self.model = BayesianRegression(input_width, y_width)
-            self.guide = None
+            # change from dict keys (to __init__ params (X_dim, y_dim)
+            self.model  = model_class( **mpars )
+            self.guide  = None
             self.pred_summary = None  ### All MC summary
+            self.history      = None
 
             if VERBOSE: log(self.guide, self.model)
 
@@ -92,22 +94,21 @@ def fit(data_pars=None, compute_pars=None, out_pars=None, **kw):
     Xtrain, ytrain, Xtest, ytest = get_dataset(data_pars, task_type="train")
 
     Xtrain = torch.tensor(Xtrain.values, dtype=torch.float)
-    Xtest = torch.tensor(Xtest.values, dtype=torch.float)
+    Xtest  = torch.tensor(Xtest.values, dtype=torch.float)
     ytrain = torch.tensor(ytrain.values, dtype=torch.float)
-    ytest = torch.tensor(ytest.values, dtype=torch.float)
+    ytest  = torch.tensor(ytest.values, dtype=torch.float)
 
     if VERBOSE: log(Xtrain, model.model)
 
     ###############################################################
     compute_pars2 = compute_pars.get('compute_pars', {})
-    n_iter = compute_pars2.get('n_iter', 1000)
-    lr = compute_pars2.get('learning_rate', 0.01)
-    method = compute_pars2.get('method', 'svi_elbo')
-
-    guide = AutoDiagonalNormal(model.model)
-    adam = pyro.optim.Adam({"lr": lr})
+    n_iter        = compute_pars2.get('n_iter', 1000)
+    lr            = compute_pars2.get('learning_rate', 0.01)
+    method        = compute_pars2.get('method', 'svi_elbo')
 
     ### SVI + Elbo is faster than HMC
+    guide = AutoDiagonalNormal(model.model)
+    adam  = pyro.optim.Adam({"lr": lr})
     svi = SVI(model.model, guide, adam, loss=Trace_ELBO())
 
     pyro.clear_param_store()
@@ -123,12 +124,12 @@ def fit(data_pars=None, compute_pars=None, out_pars=None, **kw):
 
     df_loss = pd.DataFrame(losses)
     df_loss['loss'].plot()
-    return df_loss
+    model.history =df_loss
+
 
 
 def predict(Xpred=None, data_pars={}, compute_pars=None, out_pars={}, **kw):
     global model, session
-    # data_pars['train'] = False
 
     compute_pars2 = model.compute_pars if compute_pars is None else compute_pars
     num_samples = compute_pars2.get('num_samples', 300)
@@ -140,8 +141,8 @@ def predict(Xpred=None, data_pars={}, compute_pars=None, out_pars={}, **kw):
 
     max_size = compute_pars2.get('max_size', len(Xpred))
 
-    Xpred = Xpred.iloc[:max_size, :]
-    Xpred_ = torch.tensor(Xpred.values, dtype=torch.float)
+    Xpred    = Xpred.iloc[:max_size, :]
+    Xpred_   = torch.tensor(Xpred.values, dtype=torch.float)
 
     ###### Post processing normalization
     post_process_fun = model.model_pars.get('post_process_fun', None)
@@ -156,36 +157,33 @@ def predict(Xpred=None, data_pars={}, compute_pars=None, out_pars={}, **kw):
             site_stats[k] = {
                 "mean": torch.mean(v, 0),
                 "std": torch.std(v, 0),
-                # "5%": v.kthvalue(int(len(v) * 0.05), dim=0)[0],
-                # "95%": v.kthvalue(int(len(v) * 0.95), dim=0)[0],
             }
         return site_stats
 
-    predictive = Predictive(model.model, guide=model.guide, num_samples=num_samples,
+    # If the model is loaded, it drops the guide param if it's None
+    guide      = getattr(model, "guide", None)
+    predictive = Predictive(model.model, guide=guide, num_samples=num_samples,
                             return_sites=("linear.weight", "obs", "_RETURN"))
     pred_samples = predictive(Xpred_)
     pred_summary = summary(pred_samples)
 
     mu = pred_summary["_RETURN"]
-    y = pred_summary["obs"]
+    y  = pred_summary["obs"]
     dd = {
         "mu_mean": post_process_fun(mu["mean"].detach().numpy()),
-        # "mu_perc_5"    : post_process_fun( mu["5%"].detach().numpy() ),
-        # "mu_perc_95"   : post_process_fun( mu["95%"].detach().numpy() ),
         "y_mean": post_process_fun(y["mean"].detach().numpy()),
-        # "y_perc_5"     : post_process_fun( y["5%"].detach().numpy() ),
-        # "y_perc_95"    : post_process_fun( y["95%"].detach().numpy() ),
-        # "true_salary" : y_data,
     }
     for i, col in enumerate(cols_Xpred):
         dd[col] = Xpred[col].values  # "major_PHYSICS": x_data[:, -8],
-    # print(dd)
+
     ypred_mean = pd.DataFrame(dd)
     model.pred_summary = {'pred_mean': ypred_mean, 'pred_summary': pred_summary, 'pred_samples': pred_samples}
     print('stored in model.pred_summary')
-    # print(  dd['y_mean'], dd['y_mean'].shape )
-    # import pdb; pdb.set_trace()
-    return dd['y_mean']
+
+    ypred_proba = None  ### No proba
+    if compute_pars.get("probability", False):
+         ypred_proba = model.model.predict_proba(Xpred)
+    return dd['y_mean'], ypred_proba
 
 
 def reset():
@@ -199,10 +197,10 @@ def save(path=None, info=None):
     os.makedirs(path, exist_ok=True)
 
     filename = "model.pkl"
-    pickle.dump(model, open(f"{path}/{filename}", mode='wb'))  # , protocol=pickle.HIGHEST_PROTOCOL )
+    pickle.dump(model, open(f"{path}/{filename}", mode='wb'))
 
     filename = "info.pkl"
-    pickle.dump(info, open(f"{path}/{filename}", mode='wb'))  # ,protocol=pickle.HIGHEST_PROTOCOL )
+    pickle.dump(info, open(f"{path}/{filename}", mode='wb'))
 
 
 def load_model(path=""):
@@ -229,42 +227,11 @@ def load_info(path=""):
     return dd
 
 
-def preprocess(prepro_pars):
-    if prepro_pars['type'] == 'test':
-        from sklearn.datasets import make_classification
-        from sklearn.model_selection import train_test_split
-
-        X, y = make_classification(n_features=10, n_redundant=0, n_informative=2,
-                                   random_state=1, n_clusters_per_class=1)
-
-        # log(X,y)
-        Xtrain, Xtest, ytrain, ytest = train_test_split(X, y)
-        return Xtrain, ytrain, Xtest, ytest
-
-    if prepro_pars['type'] == 'train':
-        from sklearn.model_selection import train_test_split
-        df = pd.read_csv(prepro_pars['path'])
-        dfX = df[prepro_pars['colX']]
-        dfy = df[prepro_pars['coly']]
-        Xtrain, Xtest, ytrain, ytest = train_test_split(dfX.values, dfy.values)
-        return Xtrain, ytrain, Xtest, ytest
-
-    else:
-        df = pd.read_csv(prepro_pars['path'])
-        dfX = df[prepro_pars['colX']]
-
-        Xtest, ytest = dfX, None
-        return None, None, Xtest, ytest
-
-
-####################################################################################################
-############ Do not change #########################################################################
 def get_dataset(data_pars=None, task_type="train", **kw):
     """
       "ram"  : 
       "file" :
     """
-    # log(data_pars)
     data_type = data_pars.get('type', 'ram')
     if data_type == "ram":
         if task_type == "predict":
@@ -285,18 +252,157 @@ def get_dataset(data_pars=None, task_type="train", **kw):
     raise Exception(f' Requires  Xtrain", "Xtest", "ytrain", "ytest" ')
 
 
-def get_params(param_pars={}, **kw):
-    import json
-    # from jsoncomment import JsonComment ; json = JsonComment()
-    pp = param_pars
-    choice = pp['choice']
-    config_mode = pp['config_mode']
-    data_path = pp['data_path']
+########################################################################################################################
+########################################################################################################################
+def y_norm(y, inverse=True, mode='boxcox'):
+    ## Normalize the input/output
+    if mode == 'boxcox':
+        width0 = 53.0  # 0,1 factor
+        k1 = 0.6145279599674994  # Optimal boxCox lambda for y
+        if inverse:
+                y2 = y * width0
+                # Numpy Warns of raising power to a neg nbr to in case they result in complex nbrs  
+                tmp = ((y2 * k1) + 1)
+                y2 = np.sign(tmp) * np.abs(tmp) ** (1 / k1)
+                return y2
+        else:
+                y1 = (y ** k1 - 1) / k1
+                y1 = y1 / width0
+                return y1
 
-    if choice == "json":
-        cf = json.load(open(data_path, mode='r'))
-        cf = cf[config_mode]
-        return cf['model_pars'], cf['data_pars'], cf['compute_pars'], cf['out_pars']
+    if mode == 'norm':
+        m0, width0 = 0.0, 0.0  ## Min, Max
+        if inverse:
+                y1 = (y * width0 + m0)
+                return y1
 
+        else:
+                y2 = (y - m0) / width0
+                return y2
     else:
-        raise Exception(f"Not support choice {choice} yet")
+            return y
+
+
+def test_dataset_regress_fake(nrows=500):
+    from sklearn import datasets as sklearn_datasets
+    coly   = ['y']
+    # 16 num features
+    colnum = ["colnum_" +str(i) for i in range(0, 16) ]
+    # 1 cat features
+    colcat = ['colcat_1']
+
+    # Generate a regression dataset
+    X, y    = sklearn_datasets.make_regression( n_samples=nrows, n_features=17, n_targets=1, n_informative=15,noise=0.1)
+    df      = pd.DataFrame(X,  columns= colnum+colcat)
+    df[coly]= y.reshape(-1, 1)
+    df[coly] = (df[coly] -df[coly].min() ) / (df[coly].max() -df[coly].min() )
+
+    # Assign categ values the cat columns 
+    for ci in colcat :
+      df[ci] = np.random.randint(    low=0, high=1, size=df[ci].shape )
+
+    return df, colnum, colcat, coly
+
+
+def test(nrows=1000):
+    """
+        nrows : take first nrows from dataset
+    """
+    global model, session
+
+    #### Regression PLEASE RANDOM VALUES AS TEST
+    ### Fake Regression dataset
+    df, colcat, colnum, coly = test_dataset_regress_fake(nrows=nrows)
+    X = df[colcat + colnum]
+    y = df[coly]
+
+
+    # Split the df into train/test subsets
+    X_train_full, X_test, y_train_full, y_test = train_test_split(X, y, test_size=0.05, random_state=2021, )#stratify=y) Regression no classes to stratify to
+    X_train, X_valid, y_train, y_valid         = train_test_split(X_train_full, y_train_full, random_state=2021,)# stratify=y_train_full)
+    log("X_train", X_train)
+    log("y_train", y_train)
+
+    cols_input_type_1 = []
+    n_sample = 100
+    def post_process_fun(y):
+        return y_norm(y, inverse=True, mode='norm')
+
+    def pre_process_fun(y):
+        return y_norm(y, inverse=False, mode='norm')
+
+
+    m = {'model_pars': {
+
+        # Input features, output features
+        'model_pars' : {},
+
+        'post_process_fun' : post_process_fun   ### After prediction  ##########################################
+     
+        },
+
+        'compute_pars': { 'metric_list': ['accuracy_score', 'median_absolute_error']
+                        },
+
+        'data_pars': { 
+            'n_sample' : n_sample,
+        ###################################################  
+        'train': {  'Xtrain': X_train,
+                    'ytrain': y_train,
+                    'Xtest': X_valid,
+                    'ytest': y_valid
+        },
+        'eval': {   'X': X_valid,
+                    'y': y_valid
+        },
+        'predict': {'X': X_valid}
+
+        ### Filter data rows   ##################################################################
+        ,'filter_pars': { 'ymax' : 2 ,'ymin' : -1 },
+
+        }
+    }
+
+    ##### Running loop
+    ll = [
+        ('model_bayesian_pyro.py::BayesianRegression', {'X_dim': 17,  'y_dim': 1 } )
+    ]
+    for cfg in ll:
+        # Set the ModelConfig
+        m['model_pars']['model_class'] = cfg[0]
+        m['model_pars']['model_pars']  = cfg[1]
+
+        log('Setup model..')
+        model = Model(model_pars=m['model_pars'], data_pars=m['data_pars'], compute_pars= m['compute_pars'] )
+
+        log('\n\nTraining the model..')
+        fit(data_pars=m['data_pars'], compute_pars= m['compute_pars'], out_pars=None)
+        log('Training completed!\n\n')
+
+        log('Predict data..')
+        ypred, ypred_proba = predict(Xpred=None, data_pars=m['data_pars'], compute_pars=m['compute_pars'])
+        log(f'Top 5 y_pred: {np.squeeze(ypred)[:5]}')
+
+
+        log('Saving model..')
+        save(path= "ztmp/data/output/torch_tabular")
+
+        log('Load model..')
+        model, session = load_model(path="ztmp/data/output/torch_tabular")
+        
+        log('Model architecture:')
+        log(model.model)
+
+        log('Predict data..check')
+        ypred, ypred_proba = predict(Xpred=None, data_pars=m['data_pars'], compute_pars=m['compute_pars'])
+
+        reset()
+
+
+
+if __name__ == "__main__":
+    import fire
+    fire.Fire()
+
+
+

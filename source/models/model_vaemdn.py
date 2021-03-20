@@ -8,24 +8,15 @@ Multi Density Variationnal Autoencoder
 import os, pandas as pd, numpy as np, sklearn, copy
 from sklearn.model_selection import train_test_split
 
-from keras.layers import Lambda, Input, Dense, Reshape
-from keras.datasets import mnist
-from keras.losses import mse, binary_crossentropy
-from keras.utils import plot_model
-from keras import backend as K
 import tensorflow as tf
-import numpy as np
-import tensorflow
-
-try :
-  import keras
-  from keras.callbacks import EarlyStopping, ModelCheckpoint
-  from keras import layers
-except :
-  from tensorflow import keras
-  from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
-  from tensorflow.keras import layers
-
+from tensorflow import keras
+from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
+from tensorflow.keras import layers
+from tensorflow.keras.layers import Lambda, Input, Dense, Reshape
+from tensorflow.keras.datasets import mnist
+from tensorflow.keras.losses import mse, binary_crossentropy
+from tensorflow.keras.utils import plot_model
+from tensorflow.keras import backend as K
 
 ####################################################################################################
 verbosity =2
@@ -61,7 +52,7 @@ def sampling(args):
 
 
 cols_ref_formodel = ['none']  ### No column group
-def get_model(model_pars):
+def VAEMDN(model_pars):
     
     original_dim       = model_pars['original_dim']
     class_num          = model_pars['class_num']
@@ -171,15 +162,6 @@ def get_model(model_pars):
 
 
 
-
-
-
-
-
-
-
-
-
 ##################################################################################################
 ##################################################################################################
 class Model(object):
@@ -194,6 +176,7 @@ class Model(object):
 
         ### get model params  #######################################################
         mdict_default = {
+             'original_dim' : 15,
              'class_num':           5
             ,'intermediate_dim':    64
             ,'intermediate_dim_2':  16
@@ -206,12 +189,13 @@ class Model(object):
         mdict = model_pars.get('model_pars', mdict_default)
 
         ### Dynamic Dimension : data_pars  ---> model_pars dimension  ###############
-        mdict['original_dim'] = np.uint32( data_pars['signal_dimension']*(data_pars['signal_dimension']-1)/2)
+        # mdict['original_dim'] = np.uint32( data_pars['signal_dimension']*(data_pars['signal_dimension']-1)/2)
 
 
         #### Model setup ################################
         self.model_pars['model_pars'] = mdict
-        self.model  = get_model(model_pars['model_pars'])
+        print(mdict)
+        self.model                    = VAEMDN( self.model_pars['model_pars'])
         log2(self.model_pars, self.model)
         self.model.summary()
 
@@ -227,11 +211,11 @@ def fit(data_pars=None, compute_pars=None, out_pars=None, **kw):
 
 
     early_stopping = EarlyStopping(monitor='loss', patience=3)
-    path_check     = compute_pars.get('path_checkpoint', 'ztmp/model_dir/check.ckpt')
-    os.makedirs(os.path.dirname(path_check) , exist_ok= True)
-    model_ckpt     = ModelCheckpoint(filepath =  path_check,
-                                     save_best_only=True, monitor='loss')
-    cpars['callbacks'] =  [early_stopping, model_ckpt]
+    path_check     = compute_pars.get('path_checkpoint', 'ztmp/model_dir/check_ckpt')
+    #os.makedirs(os.path.abspath(path_check) , exist_ok= True)
+    #model_ckpt     = ModelCheckpoint(filepath =  path_check,
+    #                                 save_best_only = True, monitor='loss')
+    cpars['callbacks'] =  [early_stopping] # , model_ckpt]
     # cpars['callbacks'] = {}
 
     ### Fake label
@@ -293,7 +277,7 @@ def get_dataset(data_pars=None, task_type="train", **kw):
     """
     # log(data_pars)
     if data_pars.get('dataset_name', '') == 'correlation' :
-       x_train, ytrain = get_mydata_correl(data_pars)
+       x_train, ytrain = dataset_correl(data_pars)
        return x_train, ytrain
 
 
@@ -333,7 +317,6 @@ def get_dataset(data_pars=None, task_type="train", **kw):
         raise Exception(f' {data_type} data_type Not implemented ')
 
     raise Exception(f' Requires  Xtrain", "Xtest", "ytrain", "ytest" ')
-
 
 
 def get_label(encoder, x_train, dummy_train, class_num=5, batch_size=256):
@@ -381,7 +364,7 @@ def load_model(path=""):
     model0      = pickle.load(open(f"{path}/model.pkl", mode='rb'))
 
     model = Model()  # Empty model
-    model.model        = get_model( model0.model_pars)
+    model.model        = VAEMDN( model0.model_pars['model_pars'])
     model.model_pars   = model0.model_pars
     model.compute_pars = model0.compute_pars
 
@@ -408,7 +391,15 @@ def load_info(path=""):
 
 
 ##################################################################################
-def get_mydata_correl(data_pars):
+def dataset_correl(n_rows=100):
+    data_pars = {'dataset_name':  'correlation'}
+    data_pars['state_num']           = 10
+    data_pars['time_len']            = 500
+    data_pars['signal_dimension']    = 15
+    data_pars['CNR']                 = 1
+    data_pars['window_len']          = 11
+    data_pars['half_window_len']     = 5
+    
     state_num = data_pars['state_num']
     time_len = data_pars['time_len']
     signal_dimension = data_pars['signal_dimension']
@@ -472,20 +463,16 @@ def get_mydata_correl(data_pars):
 
 
 def test():
-    ### Custom dataset
-    adata_pars = {'dataset_name':  'correlation'}
-    adata_pars['state_num']           = 10
-    adata_pars['time_len']            = 500
-    adata_pars['signal_dimension']    = 15
-    adata_pars['CNR']                 = 1
-    adata_pars['window_len']          = 11
-    adata_pars['half_window_len']     = 5
-    X,y = get_mydata_correl(adata_pars)
-
-
-    ####
-    d = {'task_type' : 'train', 'data_type': 'ram',}
-    d['signal_dimension'] = 15
+    ######### Custom dataset
+    m_signal_dim = 15
+    X,y = dataset_correl(n_rows=100)
+    
+    ######### size of NN (nb of correl)
+    n_width = np.uint32( m_signal_dim * (m_signal_dim-1)/2)
+    
+    ######### Data
+    d = {'task_type' : 'train', 'data_type': 'ram', }
+    # d['signal_dimension'] = 15
 
     d["train"] ={
       "Xtrain":  X[:10,:],
@@ -493,10 +480,11 @@ def test():
       "Xtest":   X[10:1000,:],
       "ytest":   y[10:1000,:],    ## Nor Used
     }
-
     data_pars= d
+    
+    ########## Data
     m                       = {}
-    m['original_dim']       = np.uint32( adata_pars['signal_dimension']*(adata_pars['signal_dimension']-1)/2)
+    m['original_dim']       = n_width
     m['class_num']          = 5
     m['intermediate_dim']   = 64
     m['intermediate_dim_2'] = 16
@@ -513,8 +501,8 @@ def test():
     compute_pars['compute_pars'] = {'epochs': 1, }   ## direct feed
 
 
-    ### Meta Class #########################################################
-    Xpred,_ = get_mydata_correl(adata_pars)
+    ###  Tester #########################################################
+    Xpred,_ = dataset_correl()
     test_helper(model_pars, data_pars, compute_pars, Xpred)
 
 
@@ -533,11 +521,9 @@ def test_helper(model_pars, data_pars, compute_pars, Xpred):
     ypred, ypred_proba = predict(Xpred=Xpred, data_pars=data_pars, compute_pars=compute_pars)
     log(f'Top 5 y_pred: {np.squeeze(ypred)[:3]}')
 
-    #
     log('Saving model..')
     log( model.model.summary() )
     save(path= root + '/model_dir/')
-
 
     log('Load model..')
     model, session = load_model(path= root + "/model_dir/")
@@ -551,16 +537,14 @@ def test_helper(model_pars, data_pars, compute_pars, Xpred):
 
 
 
-
-
-
-
 if __name__ == "__main__":
-    test()
-    # import fire
-    # fire.Fire()
+    # test()
+    import fire
+    fire.Fire()
 
 
+    
+    
 
 
 def a():

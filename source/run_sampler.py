@@ -328,53 +328,105 @@ def run_train(config_name, config_path="source/config_model.py", n_sample=5000,
 
 
 
-def run_model_check(path_output, scoring):
+
+####################################################################################################
+############CLI Command ############################################################################
+def transform(model_name, path_model, dfX, cols_family, model_dict):
     """
-    :param path_output:
-    :param scoring:
-    :return:
+    Arguments:
+        model_name {[str]} -- [description]
+        path_model {[str]} -- [description]
+        dfX {[DataFrame]} -- [description]
+        cols_family {[dict]} -- [description]
+
+    Returns: ypred
+        [numpy.array] -- [vector of prediction]
     """
-    import pandas as pd
-    try :
-        #### Load model
-        from source.util_feature import load
-        from source.models import model_sklearn as modelx
-        import sys
-        from source import models
-        sys.modules['models'] = models
-
-        dir_model    = path_output
-        modelx.model = load( dir_model + "/model/model.pkl" )
-        stats        = load( dir_model + "/model/info.pkl" )
-        colsX        = load( dir_model + "/model/colsX.pkl"   )
-        coly         = load( dir_model + "/model/coly.pkl"   )
-        print(stats)
-        print(modelx.model.model)
-
-        ### Metrics on test data
-        log(stats['metrics_test'])
-
-        #### Loading training data  ######################################################
-        dfX     = pd.read_csv(dir_model + "/check/dfX.csv")  #to load csv
-        #dfX = pd.read_parquet(dir_model + "/check/dfX.parquet")    #to load parquet
-        dfy     = dfX[coly]
-        colused = colsX
-
-        dfXtest = pd.read_csv(dir_model + "/check/dfXtest.csv")    #to load csv
-        #dfXtest = pd.read_parquet(dir_model + "/check/dfXtest.parquet"    #to load parquet
-        dfytest = dfXtest[coly]
-        print(dfX.shape,  dfXtest.shape )
+    modelx = map_model(model_name)
+    modelx.reset()
+    log(modelx, path_model)
+    sys.path.append( root)    #### Needed due to import source error
 
 
-        #### Feature importance on training data  #######################################
-        from util_feature import  feature_importance_perm
-        lgb_featimpt_train,_ = feature_importance_perm(modelx, dfX[colused], dfy,
-                                                       colused,
-                                                       n_repeats=1,
-                                                       scoring=scoring)
-        print(lgb_featimpt_train)
-    except :
-        pass
+    log("#### Load model  ############################################")
+    print(path_model + "/model/model.pkl")
+    modelx.model = modelx.load(path_model + "/model.pkl")
+
+    colsX       = load(path_model + "/colsX.pkl")   ## column name
+
+    # coly  = load( path_model + "/model/coly.pkl"   )
+    assert colsX is not None, "cannot load colsx, " + path_model
+    assert modelx.model is not None, "cannot load modelx, " + path_model
+    log("#### modelx\n", modelx.model.model)
+
+    log("### Prediction  ############################################")
+    dfX1  = dfX.reindex(columns=colsX)   #reindex included
+
+    dfX = modelx.transform(dfX1,
+                           data_pars    = model_dict['data_pars'],
+                           compute_pars = model_dict['compute_pars']
+                           )
+    dfX.index  = dfX1.index 
+    return dfX
+
+
+####################################################################################################
+############CLI Command ############################################################################
+def run_transform(config_name, config_path, n_sample=-1,
+                path_data=None, path_output=None, pars={}, model_dict=None):
+
+    model_dict = model_dict_load(model_dict, config_path, config_name, verbose=True)
+    m          = model_dict['global_pars']
+
+    model_class      = model_dict['model_pars']['model_class']
+    path_data        = m['path_pred_data']   if path_data   is None else path_data
+    path_pipeline    = m['path_pred_pipeline']    #   path_output + "/pipeline/" )
+    path_model       = m['path_pred_model']
+
+    path_output      = m['path_pred_output'] if path_output is None else path_output
+    log(path_data, path_model, path_output)
+
+    pars = {'cols_group': model_dict['data_pars']['cols_input_type'],
+            'pipe_list' : model_dict['model_pars']['pre_process_pars']['pipe_list']}
+
+
+
+    ##########################################################################################
+    from run_preprocess import preprocess_inference   as preprocess
+    colid            = load(f'{path_pipeline}/colid.pkl')
+    df               = load_dataset(path_data, path_data_y=None, colid=colid, n_sample=n_sample)
+    dfX, cols        = preprocess(df, path_pipeline, preprocess_pars=pars)
+    coly = cols["coly"]  
+
+
+    log("#### Extract column names  #####################################################")
+    ### Actual column names for Model Input :  label y and Input X (colnum , colcat), remove duplicate names
+    model_dict['data_pars']['coly']       = cols['coly']
+    model_dict['data_pars']['cols_model'] = list(set(sum([  cols[colgroup] for colgroup in model_dict['data_pars']['cols_model_group'] ]   , []) ))
+
+
+    #### Col Group by column type : Sparse, continuous, .... (ie Neural Network feed Input, remove duplicate names
+    ## 'coldense' = [ 'colnum' ]     'colsparse' = ['colcat' ]
+    model_dict['data_pars']['cols_model_type2'] = {}
+    for colg, colg_list in model_dict['data_pars'].get('cols_model_type', {}).items() :
+        model_dict['data_pars']['cols_model_type2'][colg] = list(set(sum([  cols[colgroup] for colgroup in colg_list ]   , [])))
+
+
+    log("############ Prediction  ###################################################" )
+    dfX   = tranform(model_class, path_model, dfX, cols, model_dict)
+    post_process_fun        = model_dict['model_pars']['post_process_fun']
+
+
+    if return_mode == 'dict' :
+        return { 'dfXy' : dfXy,  'stats' : stats   }
+
+
+    else :
+        log("#### Export ##################################################################")
+        os.makedirs(path_check_out, exist_ok=True)
+        dfX.to_parquet(path_check_out + "/dfX.parquet")  # train input data generate parquet
+        log("######### Finish #############################################################", )
+
 
 
 if __name__ == "__main__":

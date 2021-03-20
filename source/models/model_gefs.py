@@ -6,10 +6,7 @@ python model_gef.py test
 
 
 """
-import os, sys
-import pandas as pd
-import numpy as np
-import sklearn
+import os, sys, pandas as pd, numpy as np, sklearn
 
 try :
   ### in repo/model_gefs/  
@@ -29,7 +26,6 @@ def log(*s):
 
 ####################################################################################################
 global model, session
-
 
 def init(*kw, **kwargs):
     global model, session
@@ -189,13 +185,149 @@ def get_dataset(data_pars=None, task_type="train", **kw):
 
         
 ####################################################################################################        
-############ Custom Code ############################################################################
-def is_continuous(v_array):
+############ Test ##################################################################################
+def pd_colcat_get_catcount(df, colcat:list=None):
+    """  Learns the number of categories in each variable and standardizes the df.
+        ncat: numpy m The number of categories of each variable. One if the variable is continuous.
     """
-        Returns true if df was sampled from a continuous variables, and false
+    df   = df.copy()
+    ncat = {col: 1 for  col in df.columns }
+    for i,col in enumerate(colcat) :
+            df[col]   = df[col].astype(int)
+            ncat[col] = df[col].nunique()
+    return ncat
+
+
+
+def test_dataset_classi_fake(nrows=500):
+    from sklearn import datasets as sklearn_datasets
+    ndim=11
+    coly   = 'y'
+    colnum = ["colnum_" +str(i) for i in range(0, ndim) ]
+    colcat = ['colcat_1']
+    X, y    = sklearn_datasets.make_classification(
+        n_samples=1000,
+        n_features=ndim,
+        n_targets=1,
+        n_informative=ndim
+    )
+    df         = pd.DataFrame(X,  columns= colnum)
+    df[coly]   = y.reshape(-1, 1)
+
+    for ci in colcat :
+      df[colcat] = np.random.randint(0,1, len(df))
+
+    return df, colnum, colcat, coly
+
+
+
+
+def test():
+    df, colcat, colnum, coly = test_dataset_classi_fake(nrows=500)
+    X = df[colcat + colnum]
+    y = df[coly]
+
+
+    def post_process_fun(y):   ### After prediction is done
+        return  int(y)
+
+    def pre_process_fun(y):    ### Before the prediction is done
+        return  int(y)
+
+
+    m = {"model_pars": {
+        ### LightGBM API model   #######################################
+         "model_class": "model_gefs.py::Model"
+        ,"model_pars" : {'cat': 10, 'n_estimators': 5
+                        }
+
+        , "post_process_fun" : post_process_fun   ### After prediction  ##########################################
+        , "pre_process_pars" : {"y_norm_fun" :  pre_process_fun ,  ### Before training  ##########################
+
+
+        ### Pipeline for data processing ##############################
+        "pipe_list": [
+        #### coly target prorcessing
+        {"uri": "source/prepro.py::pd_coly",                 "pars": {}, "cols_family": "coly",       "cols_out": "coly",           "type": "coly"         },
+        {"uri": "source/prepro.py::pd_colnum_bin",           "pars": {}, "cols_family": "colnum",     "cols_out": "colnum_bin",     "type": ""             },
+
+        #### catcol INTO integer,   colcat into OneHot
+        {"uri": "source/prepro.py::pd_colcat_bin",           "pars": {}, "cols_family": "colcat",     "cols_out": "colcat_bin",     "type": ""             },
+        {"uri": "source/prepro.py::pd_colcat_to_onehot",     "pars": {}, "cols_family": "colcat_bin", "cols_out": "colcat_onehot",  "type": ""             },
+
+        ],
+               }
+        },
+
+      "compute_pars": { "metric_list": ["accuracy_score","average_precision_score"]
+                        # ,"mlflow_pars" : {}   ### Not empty --> use mlflow
+                      },
+
+      "data_pars": { "n_sample" : n_sample,
+          "download_pars" : None,
+
+          ### Raw data:  column input ##############################################################
+          "cols_input_type" : cols_input_type_1,
+
+
+          ### Model Input :  Merge family of columns   #############################################
+          "cols_model_group": [ "colnum_bin",
+                                "colcat_bin",
+                              ]
+
+      #### Model Input : Separate Category Sparse from Continuous : Aribitrary name is OK (!)
+     ,'cols_model_type': {
+         'continuous'   : [ 'colnum',   ],
+         'sparse'       : [ 'colcat_bin', 'colnum_bin',  ],
+         'my_split_23'  : [ 'colnum_bin',   ],
+      }   
+
+          ### Filter data rows   ##################################################################
+         ,"filter_pars": { "ymax" : 2 ,"ymin" : -1 }
+
+         }
+      }
+
+    ######## Run ###########################################
+    test_helper(m['model_pars'], m['data_pars'], m['compute_pars'])
+
+
+def test_helper(model_pars, data_pars, compute_pars):
+    global model, session
+    root  = "ztmp/"
+    model = Model(model_pars=model_pars, data_pars=data_pars, compute_pars=compute_pars)
+
+    log('\n\nTraining the model..')
+    fit(data_pars=data_pars, compute_pars=compute_pars, out_pars=None)
+
+    log('Predict data..')
+    ypred, ypred_proba = predict(Xpred=None, data_pars=data_pars, compute_pars=compute_pars)
+    log(f'Top 5 y_pred: {np.squeeze(ypred)[:5]}')
+
+    log('Evaluating the model..')
+    log(eval(data_pars=data_pars, compute_pars=compute_pars))
+
+    log('Saving model..')
+    save(path= root + '/model_dir/')
+
+    log('Load model..')
+    model, session = load_model(path= root + "/model_dir/")
+    log('Model successfully loaded!\n\n')
+
+    log('Model architecture:')
+    log(model.model)
+
+    log('Predict data..')
+    ypred, ypred_proba = predict(Xpred=None, data_pars=data_pars, compute_pars=compute_pars)
+    log(f'Top 5 y_pred: {np.squeeze(ypred)[:5]}')
+
+
+
+def is_continuous(v_array):
+    """ Returns true if df was sampled from a continuous variables, and false
     """
     observed = v_array[~np.isnan(v_array)]  # not consider missing values for this.
-    rules    = [np.min(observed) < 0,
+    rules    = [np.min(observed) < -1,
                 np.sum((observed) != np.round(observed)) > 0,
                 len(np.unique(observed)) > min(30, len(observed) / 3)]
     if any(rules):
@@ -204,51 +336,10 @@ def is_continuous(v_array):
         return False
 
 
-def pd_colcat_get_catcount(df, classcol=None, continuous_ids=[]):
-    """
-        Learns the number of categories in each variable and standardizes the df.
-        Parameters
-        ----------
-        df: numpy n x m  Numpy array comprising n realisations (instances) of m variables.
-        classcol: int   The column index of the class variables (if any).
-        continuous_ids: list of ints
-            List containing the indices of known continuous variables. Useful for
-            discrete df like age, which is better modeled as continuous.
-        Returns
-        -------
-        ncat: numpy m The number of categories of each variable. One if the variable is continuous.
-    """
-    df   = df.copy()
-    ncat = np.ones(df.shape[1])
-    if not classcol:
-        classcol = df.shape[1] - 1
-    for i in range(df.shape[1]):
-        if i != classcol and (i in continuous_ids or is_continuous(df[:, i])):
-            continue
-        else:
-            df[:, i] = df[:, i].astype(int)
-            ncat[i] = max(df[:, i]) + 1
-    return ncat
-
-                                     
-def test():
+def test2():
     # Auxiliary functions
     def get_stats(data, ncat=None):
-        """
-            Compute univariate statistics for continuous variables. Parameters
-            ----------
-            data: numpy n x m
-                Numpy array comprising n realisations (instances) of m variables.
-            Returns
-            -------
-            data: numpy n x m
-                The normalized data.
-            maxv, minv: numpy m
-                The maximum and minimum values of each variable. One and zero, resp.
-                if the variable is categorical.
-            mean, std: numpy m
-                The mean and standard deviation of the variable. Zero and one, resp.
-                if the variable is categorical.
+        """     Compute univariate statistics for continuous variables. Parameters
         """
         data = data.copy()
         maxv = np.ones(data.shape[1])
@@ -275,10 +366,9 @@ def test():
                     data[:, i] = (data[:, i] - minv[i]) / (maxv[i] - minv[i])
         return data, maxv, minv, mean, std
 
-                                     
+
     def standardize_data(data, mean, std):
-        """
-            Standardizes the data given the mean and standard deviations values of
+        """ Standardizes the data given the mean and standard deviations values of
             each variable.
         """
         data = data.copy()
@@ -289,21 +379,19 @@ def test():
                 data[:, v] = np.clip(data[:, v], -6, 6)
         return data
 
-                                     
+
     def train_test(data, ncat, train_ratio=0.7, prep='std'):
-        assert train_ratio >= 0
-        assert train_ratio <= 1
         shuffle    = np.random.choice(range(data.shape[0]), data.shape[0], replace=False)
         data_train = data[shuffle[:int(train_ratio * data.shape[0])], :]
         data_test  = data[shuffle[int(train_ratio * data.shape[0]):], :]
-                                                    
+
         if prep == 'std':
             _, maxv, minv, mean, std = get_stats(data_train, ncat)
             data_train               = standardize_data(data_train, mean, std)
             X_train, y_train         = data_train[:, :-1], data_train[:, -1]
             return X_train, y_train, data_train, data_test, mean, std
 
-                                     
+
     # Load toy dataset
     df_white   = pd.read_csv('https://raw.githubusercontent.com/arita37/GeFs/master/data/winequality_white.csv', sep=';').values
     ncat_white = pd_colcat_get_catcount(df_white, classcol=-1)
@@ -312,7 +400,7 @@ def test():
     X_train_white, y_train_white, data_train_white, data_test_white, mean_white, std_white = train_test(df_white,
                                                                                                         ncat_white, 0.7)
     y_train_white = np.where(y_train_white <= 6, 0, 1)
-    
+
     model_pars = {
         'n_estimators':100,
         'ncat': ncat_white
@@ -323,6 +411,7 @@ def test():
     gef_white = model_white.model.topc(learnspn=np.Inf)
 
     log('gefs model test ok')
+
 
                                      
 if __name__ == "__main__":
