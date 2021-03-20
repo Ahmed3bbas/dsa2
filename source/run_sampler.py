@@ -360,20 +360,22 @@ def transform(model_name, path_model, dfX, cols_family, model_dict):
     log("#### modelx\n", modelx.model.model)
 
     log("### Prediction  ############################################")
-    dfX1  = dfX.reindex(columns=colsX)   #reindex included
+    # dfX1  = dfX.reindex(columns=colsX)   #reindex included
 
-    dfX = modelx.transform(dfX1,
+    dfX = modelx.transform(dfX,
                            data_pars    = model_dict['data_pars'],
                            compute_pars = model_dict['compute_pars']
                            )
-    dfX.index  = dfX1.index 
+    # dfX.index  = dfX1.index 
     return dfX
 
 
 ####################################################################################################
 ############CLI Command ############################################################################
+from util_feature import load_function_uri, load, load_dataset
+
 def run_transform(config_name, config_path, n_sample=-1,
-                path_data=None, path_output=None, pars={}, model_dict=None):
+                path_data=None, path_output=None, pars={}, model_dict=None, return_mode=""):
 
     model_dict = model_dict_load(model_dict, config_path, config_name, verbose=True)
     m          = model_dict['global_pars']
@@ -382,20 +384,28 @@ def run_transform(config_name, config_path, n_sample=-1,
     path_data        = m['path_pred_data']   if path_data   is None else path_data
     path_pipeline    = m['path_pred_pipeline']    #   path_output + "/pipeline/" )
     path_model       = m['path_pred_model']
+    model_file       = model_dict['data_pars'].get('model_file',"model_sampler")
 
     path_output      = m['path_pred_output'] if path_output is None else path_output
     log(path_data, path_model, path_output)
 
     pars = {'cols_group': model_dict['data_pars']['cols_input_type'],
             'pipe_list' : model_dict['model_pars']['pre_process_pars']['pipe_list']}
+    
 
 
 
     ##########################################################################################
     from run_preprocess import preprocess_inference   as preprocess
     colid            = load(f'{path_pipeline}/colid.pkl')
-    df               = load_dataset(path_data, path_data_y=None, colid=colid, n_sample=n_sample)
-    dfX, cols        = preprocess(df, path_pipeline, preprocess_pars=pars)
+    if model_class in SUPERVISED_MODELS:
+        path_pred_X      = m.get('path_pred_X', path_data + "/features.zip") #.zip
+        path_pred_y      = m.get('path_pred_y', path_data + "/target.zip")   #.zip
+        df               = load_dataset(path_pred_X, path_pred_y, colid, n_sample= n_sample)
+    else:
+        df               = load_dataset(path_data, None, colid, n_sample= n_sample)
+
+    dfX, cols            = preprocess(df, path_pipeline, preprocess_pars=pars)
     coly = cols["coly"]  
 
 
@@ -405,28 +415,34 @@ def run_transform(config_name, config_path, n_sample=-1,
     model_dict['data_pars']['cols_model'] = list(set(sum([  cols[colgroup] for colgroup in model_dict['data_pars']['cols_model_group'] ]   , []) ))
 
 
-    #### Col Group by column type : Sparse, continuous, .... (ie Neural Network feed Input, remove duplicate names
-    ## 'coldense' = [ 'colnum' ]     'colsparse' = ['colcat' ]
+    ####    Col Group by column type : Sparse, continuous, .... (ie Neural Network feed Input, remove duplicate names
+    ####   'coldense' = [ 'colnum' ]     'colsparse' = ['colcat' ]
     model_dict['data_pars']['cols_model_type2'] = {}
     for colg, colg_list in model_dict['data_pars'].get('cols_model_type', {}).items() :
         model_dict['data_pars']['cols_model_type2'][colg] = list(set(sum([  cols[colgroup] for colgroup in colg_list ]   , [])))
 
 
     log("############ Prediction  ###################################################" )
-    dfX   = tranform(model_class, path_model, dfX, cols, model_dict)
+    # global model
+    model                   = load(path_model + "/model.pkl")
+    if model_class in SUPERVISED_MODELS:
+        dfXy                = transform(model_file, path_model, (dfX[[c for c in dfX.columns if c not in coly]], df[coly]),{}, model_dict)
+    else:
+        dfXy                = transform(model_file, path_model, dfX,{}, model_dict)
+
     post_process_fun        = model_dict['model_pars']['post_process_fun']
 
 
     if return_mode == 'dict' :
-        return { 'dfXy' : dfXy,  'stats' : stats   }
+        return { 'dfXy' : dfXy   }
 
 
     else :
         log("#### Export ##################################################################")
+        path_check_out      = m.get('path_check_out',      path_output + "/check/" )
         os.makedirs(path_check_out, exist_ok=True)
         dfX.to_parquet(path_check_out + "/dfX.parquet")  # train input data generate parquet
         log("######### Finish #############################################################", )
-
 
 
 if __name__ == "__main__":
