@@ -374,7 +374,7 @@ def transform(model_name, path_model, dfX, cols_family, model_dict):
 ############CLI Command ############################################################################
 from util_feature import load_function_uri, load, load_dataset
 
-def run_transform(config_name, config_path, n_sample=-1,
+def run_transform(config_name, config_path, n_sample=1,
                 path_data=None, path_output=None, pars={}, model_dict=None, return_mode=""):
 
     model_dict = model_dict_load(model_dict, config_path, config_name, verbose=True)
@@ -384,7 +384,7 @@ def run_transform(config_name, config_path, n_sample=-1,
     path_data        = m['path_pred_data']   if path_data   is None else path_data
     path_pipeline    = m['path_pred_pipeline']    #   path_output + "/pipeline/" )
     path_model       = m['path_pred_model']
-    model_file       = model_dict['data_pars'].get('model_file',"model_sampler")
+    model_file       = m.get('model_file', "")
 
     path_output      = m['path_pred_output'] if path_output is None else path_output
     log(path_data, path_model, path_output)
