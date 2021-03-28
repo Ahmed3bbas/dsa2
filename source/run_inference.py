@@ -160,7 +160,7 @@ def run_predict(config_name, config_path, n_sample=-1,
 
     post_process_fun        = model_dict['model_pars']['post_process_fun']
     df[ coly + "_pred"]     = ypred
-    df[ coly + "_pred"]     = dfX[coly + '_pred'].apply(lambda  x : post_process_fun(x) )
+    df[ coly + "_pred"]     = df[coly + '_pred'].apply(lambda  x : post_process_fun(x) )
     if yproba is not None :
        df[ coly + "_pred_proba"] = yproba
 

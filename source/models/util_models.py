@@ -94,6 +94,38 @@ def test_dataset_classi_fake(nrows=500):
     return df, colnum, colcat, coly
 
 
+def test_dataset_covtype(nrows=1000):
+
+    # Dense features
+    colnum = ["Elevation", "Aspect", "Slope", "Horizontal_Distance_To_Hydrology",
+        "Vertical_Distance_To_Hydrology", "Horizontal_Distance_To_Roadways", "Hillshade_9am" , "Hillshade_Noon",  "Hillshade_3pm", "Horizontal_Distance_To_Fire_Points"]
+
+    # Sparse features
+    colcat = ["Wilderness_Area1",  "Wilderness_Area2", "Wilderness_Area3",
+        "Wilderness_Area4",  "Soil_Type1",  "Soil_Type2",  "Soil_Type3", "Soil_Type4",  "Soil_Type5",  "Soil_Type6",  "Soil_Type7",  "Soil_Type8",  "Soil_Type9", "Soil_Type10",  "Soil_Type11",  "Soil_Type12",  "Soil_Type13",  "Soil_Type14", "Soil_Type15",  "Soil_Type16",  "Soil_Type17",  "Soil_Type18",  "Soil_Type19", "Soil_Type40",  ]
+
+    # Target column
+    coly        = ["Covertype"]
+
+    log("start")
+    global model, session
+
+    root = os.path.join(os.getcwd() ,"ztmp")
+
+
+    BASE_DIR = Path.home().joinpath( root, 'data/input/covtype/')
+    datafile = BASE_DIR.joinpath('covtype.data.gz')
+    datafile.parent.mkdir(parents=True, exist_ok=True)
+    url = "https://archive.ics.uci.edu/ml/machine-learning-databases/covtype/covtype.data.gz"
+
+    # Download the dataset in case it's missing
+    if not datafile.exists():
+        wget.download(url, datafile.as_posix())
+
+    # Read nrows of only the given columns
+    feature_columns = colnum + colcat + coly
+    df = pd.read_csv(datafile, header=None, names=feature_columns, nrows=nrows)
+    return df, colnum, colcat, coly
 
 
 

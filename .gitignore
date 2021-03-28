@@ -213,3 +213,5 @@ mlflow_local.db
 /source/models/repo/VAEM/data/bank/bank
 /source/models/saved_weights/bank/checkpoint
 /source/models/saved_weights/bank
+/source/models/datasets/petfinder-mini
+/source/models/datasets

@@ -2,13 +2,17 @@
 # -*- coding: utf-8 -*-
 """
 Multi Density Variationnal Autoencoder
-
+Only with TF1
 
 """
 import os, pandas as pd, numpy as np, sklearn, copy
 from sklearn.model_selection import train_test_split
 
 import tensorflow as tf
+
+if  "1." in tf.version.VERSION :
+    print('Compatible only with TF 2.')
+
 from tensorflow import keras
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 from tensorflow.keras import layers
@@ -100,27 +104,32 @@ def VAEMDN(model_pars):
     encoder = keras.models.Model([inputs, dummy], [z_mean, z_log_var, z,
                                       mu, c, c_outlier, pi], name='encoder')
 
-    # build decoder model
+
+
+    ####### build decoder model  ########################################################
     latent_inputs = Input(shape=(latent_dim,), name='z_sampling')
     inter_y1 = Dense(intermediate_dim_2, activation='tanh')(latent_inputs)
     inter_y2 = Dense(intermediate_dim, activation='tanh')(inter_y1)
     outputs = Dense(original_dim, activation='tanh')(inter_y2)
 
-    # instantiate decoder model
+    ########### instantiate decoder model
     decoder = keras.models.Model(latent_inputs, outputs, name='decoder')
     # plot_model(decoder, to_file='vae_mlp_decoder.png', show_shapes=True)
 
-    # instantiate VAE model
+
+
+    ################## instantiate VAE model  ####################################################
     outputs = decoder(encoder([inputs, dummy])[2])
     vae = keras.models.Model([inputs, dummy], outputs, name='vae_mlp')
     reconstruction_loss = mse(inputs, outputs)
-    reconstruction_loss = tf.compat.v1.multiply(
-        reconstruction_loss, c_outlier[:, 0])
+    reconstruction_loss = tf.compat.v1.multiply( reconstruction_loss, c_outlier[:, 0])
     reconstruction_loss *= original_dim
+
     kl_loss_all = tf.compat.v1.get_variable("kl_loss_all", [batch_size, 1],
                                     dtype=tf.compat.v1.float32, initializer=tf.compat.v1.zeros_initializer)
     kl_cat_all = tf.compat.v1.get_variable("kl_cat_all", [batch_size, 1],
                                    dtype=tf.compat.v1.float32, initializer=tf.compat.v1.zeros_initializer)
+
     dir_prior_all = tf.compat.v1.get_variable("dir_prior_all", [batch_size, 1],
                                       dtype=tf.compat.v1.float32, initializer=tf.compat.v1.zeros_initializer)
     for i in range(0, class_num):
@@ -158,7 +167,65 @@ def VAEMDN(model_pars):
     vae.add_loss(vae_loss)
     vae.compile(optimizer='adam')
     print(vae.summary() )
-    return vae
+    return vae, encoder, decoder
+
+
+
+def ae_basic():
+    from sklearn.compose import ColumnTransformer
+    from sklearn.preprocessing import OneHotEncoder, LabelEncoder
+    from sklearn.preprocessing import MinMaxScaler
+    import pandas as pd
+    import numpy as np
+    import tensorflow as tf
+    import keras.backend as K
+    print(tf.__version__)
+    data = np.random.randint(10000, size=(10000, 2))
+    print(data.shape)
+    df = pd.DataFrame(data, columns = ["users","items"])
+    # df.head(3)
+
+    # print(len(df["users"].value_counts()))
+    # print(len(df["items"].value_counts()))
+
+    col_transform = ColumnTransformer(transformers=[('cat', OneHotEncoder(drop='first'), ["users","items"])], remainder="passthrough", sparse_threshold=0.1)
+    X = col_transform.fit_transform(df).todense()
+
+    xtrain = X[0:9000]
+    xtest =  X[9000:10000]
+    # xtrain
+
+    # X_train = tf.sparse.from_dense(xtrain) # from densed version to sparse
+    X_train = xtrain # keep densed
+    print(type(X_train))
+
+    def custom_loss_func_dice(y_true, y_pred, smooth=1):
+      intersection = K.sum(K.abs(y_true * y_pred), axis=-1)
+      return (2. * intersection + smooth) / (K.sum(K.square(y_true),-1) + K.sum(K.square(y_pred),-1) + smooth)
+
+    encodingdim = 50 
+    # input =  tf.keras.layers.Input(X.shape[1],sparse=True) # use this if tensor is sparse
+    input   = tf.keras.layers.Input(X.shape[1]) 
+    encoded = tf.keras.layers.Dense(500, activation='relu')(input)
+    encoded = tf.keras.layers.Dense(250, activation='relu')(encoded)
+    encoded = tf.keras.layers.Dense(encodingdim, activation='relu')(encoded)
+
+    decoded = tf.keras.layers.Dense(250, activation='relu')(encoded)
+    decoded = tf.keras.layers.Dense(500, activation='relu')(decoded)
+    decoded = tf.keras.layers.Dense(X.shape[1], activation='relu')(decoded)
+
+    autoencoder = tf.keras.Model(input, decoded)
+
+    opt = tf.keras.optimizers.Adagrad(lr=0.01, epsilon=1e-3, decay=1e-4)
+
+
+    # autoencoder.compile(optimizer=opt, loss=tf.keras.losses.CosineSimilarity(reduction="auto")) # cosine loss
+    # autoencoder.compile(optimizer=opt, loss= custom_loss_func_dice) # dice loss (I used custom loss function and implemented it freehand to show how you can create your own custom function.)
+    autoencoder.compile(optimizer=opt, loss= tf.keras.losses.categorical_crossentropy) # this is same algorith explained as "CustomLoss" topic in pytorch version.
+
+    return autoencoder
+    # autoencoder.fit(X_train, X_train,epochs=15,batch_size=64,shuffle=True)
+
 
 
 
@@ -170,10 +237,10 @@ class Model(object):
         self.history = None
         if model_pars is None:
             self.model = None
+            self.encoder, self.decoder = None, None
             return
-        # log2("data_pars", data_pars)
-        model_class = model_pars['model_class']  #
 
+        model_class = model_pars['model_class']  
         ### get model params  #######################################################
         mdict_default = {
              'original_dim' : 15,
@@ -192,12 +259,11 @@ class Model(object):
         # mdict['original_dim'] = np.uint32( data_pars['signal_dimension']*(data_pars['signal_dimension']-1)/2)
 
 
-        #### Model setup ################################
+        #### Model setup #############################################################
         self.model_pars['model_pars'] = mdict
-        print(mdict)
-        self.model                    = VAEMDN( self.model_pars['model_pars'])
+        self.model, self.encoder, self.decoder = VAEMDN( self.model_pars['model_pars'])
         log2(self.model_pars, self.model)
-        self.model.summary()
+        # self.model.summary()
 
 
 def fit(data_pars=None, compute_pars=None, out_pars=None, **kw):
@@ -229,10 +295,10 @@ def fit(data_pars=None, compute_pars=None, out_pars=None, **kw):
     model.history = hist
 
 
-def predict(Xpred=None, data_pars=None, compute_pars={}, out_pars={}, **kw):
+
+def encode(Xpred=None, data_pars=None, compute_pars={}, out_pars={}, **kw):
     global model, session
     if Xpred is None:
-        # data_pars['train'] = False
         Xpred_tuple = get_dataset(data_pars, task_type="predict")
 
     else :
@@ -240,13 +306,41 @@ def predict(Xpred=None, data_pars=None, compute_pars={}, out_pars={}, **kw):
         Xpred_tuple = get_dataset_tuple(Xpred, cols_type, cols_ref_formodel)
 
     log2(Xpred_tuple)
-    Xdummy = np.ones((Xpred_tuple.shape[0], 1))
-    ypred = model.model.predict([Xpred_tuple, Xdummy ] )
+    Xdummy      = np.ones((Xpred_tuple.shape[0], 1))
+    Xnew_encode = model.model.encode([Xpred_tuple, Xdummy ] )
+    return Xnew_encode
 
-    ypred_proba = None  ### No proba
-    if compute_pars.get("probability", False):
-         ypred_proba = model.model.predict_proba(Xpred)
-    return ypred, ypred_proba
+
+def decode(Xpred=None, data_pars=None, compute_pars={}, out_pars={}, **kw):
+    global model, session
+    if Xpred is None:
+        Xpred_tuple = get_dataset(data_pars, task_type="predict")
+
+    else :
+        cols_type   = data_pars.get('cols_model_type2', {})  ##
+        Xpred_tuple = get_dataset_tuple(Xpred, cols_type, cols_ref_formodel)
+
+    log2(Xpred_tuple)
+    Xdummy      = np.ones((Xpred_tuple.shape[0], 1))
+    Xnew_decode = model.model.decode([Xpred_tuple, Xdummy ] )
+    return Xnew_decode
+
+
+def predict(Xpred=None, data_pars=None, compute_pars={}, out_pars={}, **kw):
+    global model, session
+    if Xpred is None:
+        Xpred_tuple = get_dataset(data_pars, task_type="predict")
+
+    else :
+        cols_type   = data_pars.get('cols_model_type2', {})  ##
+        Xpred_tuple = get_dataset_tuple(Xpred, cols_type, cols_ref_formodel)
+
+    log2(Xpred_tuple)
+    Xdummy      = np.ones((Xpred_tuple.shape[0], 1))
+    Xnew = model.model.predict([Xpred_tuple, Xdummy ] )
+    return Xnew
+
+
 
 
 
@@ -364,7 +458,7 @@ def load_model(path=""):
     model0      = pickle.load(open(f"{path}/model.pkl", mode='rb'))
 
     model = Model()  # Empty model
-    model.model        = VAEMDN( model0.model_pars['model_pars'])
+    model.model, model.encoder, model.decoder        = VAEMDN( model0.model_pars['model_pars'])
     model.model_pars   = model0.model_pars
     model.compute_pars = model0.compute_pars
 
@@ -466,10 +560,10 @@ def test():
     ######### Custom dataset
     m_signal_dim = 15
     X,y = dataset_correl(n_rows=100)
-    
+
     ######### size of NN (nb of correl)
     n_width = np.uint32( m_signal_dim * (m_signal_dim-1)/2)
-    
+
     ######### Data
     d = {'task_type' : 'train', 'data_type': 'ram', }
     # d['signal_dimension'] = 15
@@ -481,7 +575,7 @@ def test():
       "ytest":   y[10:1000,:],    ## Nor Used
     }
     data_pars= d
-    
+
     ########## Data
     m                       = {}
     m['original_dim']       = n_width
@@ -507,19 +601,138 @@ def test():
 
 
 
+def test_dataset_classi_fake(nrows=500):
+    from sklearn import datasets as sklearn_datasets
+    ndim=11
+    coly   = 'y'
+    colnum = ["colnum_" +str(i) for i in range(0, ndim) ]
+    colcat = ['colcat_1']
+    X, y    = sklearn_datasets.make_classification(
+        n_samples=1000,
+        n_features=ndim,
+        n_targets=1,
+        n_informative=ndim
+    )
+    df         = pd.DataFrame(X,  columns= colnum)
+    df[coly]   = y.reshape(-1, 1)
+
+    for ci in colcat :
+      df[colcat] = np.random.randint(0,1, len(df))
+
+    return df, colnum, colcat, coly
+
+
+def test2():
+    n_sample          = 100
+    df, colnum, colcat, coly= test_dataset_classi_fake(nrows=500)
+
+    #### Matching Big dict  ##################################################
+    X = df
+    y = df[coly].astype('uint8')
+    log('y', np.sum(y[y==1]) )
+
+    ######### Split the df into train/test subsets
+    X_train_full, X_test, y_train_full, y_test = train_test_split(X, y, test_size=0.05, random_state=2021, stratify=y)
+    X_train, X_valid, y_train, y_valid         = train_test_split(X_train_full, y_train_full, random_state=2021, stratify=y_train_full)
+    num_classes                                = len(set(y_train_full[coly].values.ravel()))
+    log(X_train)
+
+    def post_process_fun(y):
+        return int(y)
+
+    def pre_process_fun(y):
+        return int(y)
+
+    m = {'model_pars': {
+        'model_class':  "model_vaem.py::VAMDN"
+        ,'model_pars' : {
+            'original_dim':       len( colcat + colnum),
+            'class_num':             1,
+            'intermediate_dim':     64,
+            'intermediate_dim_2':   16,
+            'latent_dim' :           3,
+            'Lambda1'    :           1,
+            'batch_size' :         256,
+            'Lambda2'    :         200,
+            'Alpha'      :         0.075
+        }
+        , 'post_process_fun' : post_process_fun   ### After prediction  ##########################################
+        , 'pre_process_pars' : {'y_norm_fun' :  pre_process_fun ,  ### Before training  ##########################
+
+        ### Pipeline for data processing ##############################
+        'pipe_list': [  #### coly target prorcessing
+            {'uri': 'source/prepro.py::pd_coly',                 'pars': {}, 'cols_family': 'coly',       'cols_out': 'coly',           'type': 'coly'         },
+            {'uri': 'source/prepro.py::pd_colnum_bin',           'pars': {}, 'cols_family': 'colnum',     'cols_out': 'colnum_bin',     'type': ''             },
+            {'uri': 'source/prepro.py::pd_colcat_bin',           'pars': {}, 'cols_family': 'colcat',     'cols_out': 'colcat_bin',     'type': ''             },
+        ],
+        }
+        },
+
+    'compute_pars': { 'metric_list': ['accuracy_score','average_precision_score'],
+                      'compute_pars' : {'epochs': 1 },
+                    },
+
+    'data_pars': { 'n_sample' : n_sample,
+        'download_pars' : None,
+        'cols_input_type' : {
+            'colcat' : colcat,
+            'colnum' : colnum,
+            'coly'  :  coly,
+        },
+        ### family of columns for MODEL  #########################################################
+        'cols_model_group': [ 'colnum_bin',   'colcat_bin',
+                            ]
+
+        ,'cols_model_group_custom' :  { 'colnum' : colnum,
+                                        'colcat' : colcat,
+                                        'coly' : coly
+                            },
+
+        ### Added continuous & sparse features groups ###
+        'cols_model_type2': {
+            'colcontinuous':   colnum ,
+            'colsparse' : colcat,
+        }
+
+        ###################################################
+        ,'train':   {'Xtrain': X_train,  'ytrain': y_train, 'Xtest':  X_valid,  'ytest':  y_valid}
+        ,'eval':    {'X': X_valid,  'y': y_valid}
+        ,'predict': {'X': X_valid}
+
+        ,'task_type' : 'train', 'data_type': 'ram'
+
+
+        ### Filter data rows   ##################################################################
+        ,'filter_pars': { 'ymax' : 2 ,'ymin' : -1 },
+
+        }
+    }
+
+    ###  Tester #########################################################
+    test_helper(m['model_pars'], m['data_pars'], m['compute_pars'])
+
+
+
+
+
+
+
+
 def test_helper(model_pars, data_pars, compute_pars, Xpred):
     global model, session
     init()
     root  = "ztmp/"
     model = Model(model_pars=model_pars, data_pars=data_pars, compute_pars=compute_pars)
 
-    log('\n\nTraining the model..')
+    log('Training the model..')
     fit(data_pars=data_pars, compute_pars=compute_pars, out_pars=None)
 
 
     log('Predict data..')
-    ypred, ypred_proba = predict(Xpred=Xpred, data_pars=data_pars, compute_pars=compute_pars)
-    log(f'Top 5 y_pred: {np.squeeze(ypred)[:3]}')
+    Xnew = predict(Xpred=Xpred, data_pars=data_pars,  compute_pars=compute_pars)
+    # Xnew = encode(Xpred=Xpred,  data_pars=data_pars,  compute_pars=compute_pars)
+    # Xnew = decode(Xpred=Xpred,  data_pars=data_pars,  compute_pars=compute_pars)
+
 
     log('Saving model..')
     log( model.model.summary() )
@@ -527,13 +740,12 @@ def test_helper(model_pars, data_pars, compute_pars, Xpred):
 
     log('Load model..')
     model, session = load_model(path= root + "/model_dir/")
-    log('Model successfully loaded!\n\n')
 
     log('Model architecture:')
     log(model.model.summary())
 
     log('Predict data..')
-    ypred, ypred_proba = predict(Xpred=Xpred, data_pars=data_pars, compute_pars=compute_pars)
+    Xnew2 = predict(Xpred=Xpred[:10,:], data_pars=data_pars, compute_pars=compute_pars)
 
 
 

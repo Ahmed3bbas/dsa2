@@ -1,12 +1,14 @@
 import numpy as np, sys,os, copy, random, pandas as pd, json
+
 from scipy.stats import bernoulli
 from random import sample
+from sklearn.feature_selection import mutual_info_regression
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 import sklearn.preprocessing as preprocessing
 from sklearn.metrics import mean_squared_error
 from sklearn.feature_selection import mutual_info_regression, mutual_info_classif
-
+import utils.active_learning as active_learning
 # tfd = tf.contrib.distributions
 import seaborn as sns; sns.set(style="ticks", color_codes=True)
 
@@ -15,9 +17,7 @@ import seaborn as sns; sns.set(style="ticks", color_codes=True)
 import tensorflow as tf
 print(tf.__version__)
 
-thisfile_path = os.path.dirname(os.path.abspath(__file__)).replace("\\", "/")
-sys.path.append( thisfile_path + "/repo/VAEM/" )
-
+#sys.path.append( os.path.dirname(os.path.abspath(__file__)) + "/repo/VAEM/" )
 
 import utils.process as process
 import utils.params as params
@@ -38,7 +38,7 @@ def log2(*s):
       print(*s, flush=True)
 
 
-#######################################################################################
+####################################################################################################
 global model, session
 
 def init(*kw, **kwargs):
@@ -57,150 +57,6 @@ fast_plot = 0
 ####################################################################################################
 ##### Custom code  #################################################################################
 cols_ref_formodel = ['none']  ### No column group
-
-
-
-##################################################################################################################################
-def reset():
-    global model, session
-    model, session = None, None
-
-def save(path='', info=None):
-    import dill as pickle, copy
-    global model, session
-    os.makedirs(path, exist_ok=True)
-
-    model.model.save(f"{path}/model_keras.h5")
-    model.model.save_weights(f"{path}/model_keras_weights.h5")
-
-    modelx = Model()  # Empty model  Issue with pickle
-    modelx.model_pars   = model.model_pars
-    modelx.data_pars    = model.data_pars
-    modelx.compute_pars = model.compute_pars
-    # log('model', modelx.model)
-    pickle.dump(modelx, open(f"{path}/model.pkl", mode='wb'))  #
-
-    pickle.dump(info, open(f"{path}/info.pkl", mode='wb'))  #
-
-
-def load_model(path=""):
-    global model, session
-    import dill as pickle
-
-    model0      = pickle.load(open(f"{path}/model.pkl", mode='rb'))
-
-    model = Model()  # Empty model
-    model.model        = get_model( model0.model_pars)
-    model.model_pars   = model0.model_pars
-    model.compute_pars = model0.compute_pars
-
-    model.model.load_weights( f'{path}/model_keras_weights.h5')
-
-    log(model.model.summary())
-    #### Issue when loading model due to custom weights, losses, Keras erro
-    #model_keras = get_model()
-    #model_keras = keras.models.load_model(path + '/model_keras.h5' )
-    session = None
-    return model, session
-
-
-def load_info(path=""):
-    import cloudpickle as pickle, glob
-    dd = {}
-    for fp in glob.glob(f"{path}/*.pkl"):
-        if not "model.pkl" in fp:
-            obj = pickle.load(open(fp, mode='rb'))
-            key = fp.split("/")[-1]
-            dd[key] = obj
-    return dd
-
-################################################################################################################################
-import pyarrow as pa
-import pyarrow.parquet as pq
-
-class Model_custom(object):
-    def __init__(self):
-        
-        ### Dynamic Dimension : data_pars  ---> model_pars dimension  ###############
-        print('Model Instantiated')
-        print('Next Step: Fit')
-
-        #log2(self.model_pars, self.model)
-        #self.model.summary()
-
-    def fit(self,filePath, categories,cat_cols,num_cols,discrete_cols,targetCol,nsample = -1,delimiter=',',plot=False):
-        """
-        This Function will load the data and fit the preprocessing technique into it
-        params:
-            filePath: CSV File path relative to file
-            categories: Categorical feature list
-            cat_cols: category_columns
-            nums_cols: Numerical Columns list
-            discrete_cols: discrete cols list
-            target_cols: Column name of Target Variable
-            nsample: No of Sample for Encoding-Decoding
-            delimiter: Delimiter in CSV File,Default=','
-
-        """
-        global model, session
-        session = None  # Session type for compute
-        self.filePath = filePath
-        self.categories = categories
-        self.cat_cols = cat_cols
-        self.num_cols = num_cols
-        self.discrete_cols = discrete_cols
-        self.targetCol = targetCol
-        self.nsample = nsample
-        self.delimiter = delimiter 
-        data_decode,records_d = load_data(self.filePath,self.categories,self.cat_cols,self.num_cols,self.discrete_cols,self.targetCol,self.nsample,self.delimiter)
-        self.data_decode = data_decode
-        self.records_d = records_d
-        self.list_discrete = discrete_cols
-        #model.model['encode'].fit([Xtrain_tuple, Xtrain_dummy],  **cpars)
-        #model.model['decode'].fit([Xtrain_tuple, Xtrain_dummy],  **cpars)
-        model1,scaling_factor = encode2(self.data_decode,self.list_discrete,self.records_d,plot)        
-        self.encoder_model = model1
-        self.scaling_factor = scaling_factor
-        model2 = decode2(self.data_decode, self.scaling_factor,self.list_discrete,self.records_d,plot=plot)
-        self.decode_model = model2
-
-
-    def encode(self):
-        global Data_decompressed,Mask_decompressed
-        '''
-        This function will be using encode2 function defined above for encoding data.
-        This Model will create a parquet file of encoded columns
-
-        '''
-        encoded_array = self.encoder_model.im(Data_decompressed,Mask_decompressed)
-        parquetDic = {}
-        for i in range(Data_decompressed.shape[1]):
-            name = f'col_{i+1}'
-            parquetDic[name] = encoded_array[:,i]
-        print('Encoded Columns')
-        log2(encoded_array)
-        ndarray_table = pa.table(parquetDic)
-        pq.write_table(ndarray_table,'my_encoder.parquet')
-        print('File my_encoder.parquet created')
-        
-
-    def decode(self):
-        global Data_decompressed
-        '''
-        This function will be using decoder2 function defined above for decoding data.
-        This Model will create a parquet file for decoded columns
-        
-        '''
-        
-        parquetDic = {}
-        for i in range(Data_decompressed.shape[1]):
-            name = f'col_{i+1}'
-            parquetDic[name] = Data_decompressed[:,i]
-
-        ndarray_table = pa.table(parquetDic)
-        pq.write_table(ndarray_table,'my_decoder.parquet')
-        print('File my_decoder.parquet created')
-        
 
 ########## Loading Of Data #########################################################################
 def load_data(filePath,categories,cat_col,num_cols,discrete_cols,targetCol,nsample,delimiter):
@@ -280,23 +136,22 @@ def load_data(filePath,categories,cat_col,num_cols,discrete_cols,targetCol,nsamp
     Data_train_noisy_decompressed = Data_noisy_decompressed[0:Data_train_decompressed.shape[0],:]
     Data_test_noisy_decompressed = Data_noisy_decompressed[Data_train_decompressed.shape[0]:,:]
 
-    data_decode = (Data_train_decompressed, Data_train_noisy_decompressed,mask_train_decompressed,Data_test_decompressed,mask_test_compressed,mask_test_decompressed,cat_dims,DIM_FLT,dic_var_type)
+    data_decode = (Data_train_decompressed,Data_train_compressed, Data_train_noisy_decompressed,mask_train_decompressed,Data_test_decompressed,mask_test_compressed,mask_test_decompressed,cat_dims,DIM_FLT,dic_var_type)
 
     return data_decode, records_d
 
 
 def encode2(data_decode,list_discrete,records_d,fast_plot):
     # Extracting Masked Decompressed Data from data_decode function obtained from load_data function
-    Data_train_decomp, Data_train_noisy_decomp,mask_train_decomp,Data_test_decomp,mask_test_comp,mask_test_decomp,cat_dims,DIM_FLT,dic_var_type = data_decode
+    Data_train_decomp,Data_train_comp, Data_train_noisy_decomp,mask_train_decomp,Data_test_decomp,mask_test_comp,mask_test_decomp,cat_dims,DIM_FLT,dic_var_type = data_decode
     
-    vae = p_vae_active_learning(Data_train_decomp, Data_train_noisy_decomp,mask_train_decomp,Data_test_decomp,mask_test_comp,mask_test_decomp,cat_dims,DIM_FLT,dic_var_type,args,list_discrete,records_d)
+    vae = p_vae_active_learning(Data_train_comp, Data_train_noisy_decomp,mask_train_decomp,Data_test_decomp,mask_test_comp,mask_test_decomp,cat_dims,DIM_FLT,dic_var_type,args,list_discrete,records_d,estimation_method=1)
 
+    tf.reset_default_graph()
+    x_recon,z_posterior,x_recon_cat_p = vae.get_imputation( Data_train_noisy_decomp, mask_train_decomp*0,cat_dims,dic_var_type) ## one hot already converted to integer
     x_real = process.compress_data(Data_train_decomp,cat_dims, dic_var_type) ## x_real still needs conversion
     x_real_cat_p = Data_train_decomp[:,0:(cat_dims.sum()).astype(int)]
-    tf.reset_default_graph()
-
-    x_recon,z_posterior,x_recon_cat_p = vae.get_imputation( Data_train_noisy_decomp, mask_train_decomp*0,cat_dims,dic_var_type) ## one hot already converted to integer
-
+    
     max_Data = 0.7
     min_Data = 0.3  
     Data_std = (x_real - x_real.min(axis=0)) / (x_real.max(axis=0) - x_real.min(axis=0))
@@ -347,9 +202,9 @@ def encode2(data_decode,list_discrete,records_d,fast_plot):
 def decode2(data_decode,scaling_factor,list_discrete,records_d,plot=False):
     args = params.Params('hyperparameters/bank_SAIA.json')
 
-    Data_train_decomp, Data_train_noisy_decomp,mask_train_decomp,Data_test_decomp,mask_test_comp,mask_test_decomp,cat_dims,DIM_FLT,dic_var_type = data_decode
+    Data_train_decomp,Data_train_comp, Data_train_noisy_decomp,mask_train_decomp,Data_test_decomp,mask_test_comp,mask_test_decomp,cat_dims,DIM_FLT,dic_var_type = data_decode
     print('Decode Training Start')
-    vae = p_vae_active_learning(Data_train_decomp,
+    vae = p_vae_active_learning(Data_train_comp,
                                                 Data_train_noisy_decomp,
                                                 mask_train_decomp,
                                                 Data_test_decomp,
@@ -390,7 +245,8 @@ def p_vae_active_learning(Data_train_compressed, Data_train,mask_train,Data_test
     global mask
     list_stage = args.list_stage
     list_strategy = args.list_strategy
-    epochs = 1
+    epochs = args.epochs
+    #epochs = 1
     latent_dim = args.latent_dim
     batch_size = args.batch_size
     p = args.p
@@ -716,9 +572,156 @@ def train_p_vae(stage, x_train, Data_train,mask_train, epochs, latent_dim,cat_di
 
 
 ##############################################################################################################################################################################################################
-def test():
+
+##################################################################################################################################
+def reset():
+    global model, session
+    model, session = None, None
+
+def save(path='', info=None):
+    import dill as pickle, copy
+    global model, session
+    os.makedirs(path, exist_ok=True)
+
+    model.model.save(f"{path}/model_keras.h5")
+    model.model.save_weights(f"{path}/model_keras_weights.h5")
+
+    modelx = Model()  # Empty model  Issue with pickle
+    modelx.model_pars   = model.model_pars
+    modelx.data_pars    = model.data_pars
+    modelx.compute_pars = model.compute_pars
+    # log('model', modelx.model)
+    pickle.dump(modelx, open(f"{path}/model.pkl", mode='wb'))  #
+
+    pickle.dump(info, open(f"{path}/info.pkl", mode='wb'))  #
+
+
+def load_model(path=""):
+    global model, session
+    import dill as pickle
+
+    model0      = pickle.load(open(f"{path}/model.pkl", mode='rb'))
+
+    model = Model()  # Empty model
+    model.model        = get_model( model0.model_pars)
+    model.model_pars   = model0.model_pars
+    model.compute_pars = model0.compute_pars
+
+    model.model.load_weights( f'{path}/model_keras_weights.h5')
+
+    log(model.model.summary())
+    #### Issue when loading model due to custom weights, losses, Keras erro
+    #model_keras = get_model()
+    #model_keras = keras.models.load_model(path + '/model_keras.h5' )
+    session = None
+    return model, session
+
+
+def load_info(path=""):
+    import cloudpickle as pickle, glob
+    dd = {}
+    for fp in glob.glob(f"{path}/*.pkl"):
+        if not "model.pkl" in fp:
+            obj = pickle.load(open(fp, mode='rb'))
+            key = fp.split("/")[-1]
+            dd[key] = obj
+    return dd
+################################################################################################################################
+import pyarrow as pa
+import pyarrow.parquet as pq
+class Model(object):
+    def __init__(self):
+        
+        ### Dynamic Dimension : data_pars  ---> model_pars dimension  ###############
+        print('Model Instantiated')
+        print('Next Step: Fit')
+
+        #log2(self.model_pars, self.model)
+        #self.model.summary()
+
+    def fit(self,filePath, categories,cat_cols,num_cols,discrete_cols,targetCol,nsample = -1,delimiter=',',plot=False):
+        """
+        This Function will load the data and fit the preprocessing technique into it
+        params:
+            filePath: CSV File path relative to file
+            categories: Categorical feature list
+            cat_cols: category_columns
+            nums_cols: Numerical Columns list
+            discrete_cols: discrete cols list
+            target_cols: Column name of Target Variable
+            nsample: No of Sample for Encoding-Decoding
+            delimiter: Delimiter in CSV File,Default=','
+
+        """
+        global model, session
+        session = None  # Session type for compute
+        self.filePath = filePath
+        self.categories = categories
+        self.cat_cols = cat_cols
+        self.num_cols = num_cols
+        self.discrete_cols = discrete_cols
+        self.targetCol = targetCol
+        self.nsample = nsample
+        self.delimiter = delimiter 
+        data_decode,records_d = load_data(self.filePath,self.categories,self.cat_cols,self.num_cols,self.discrete_cols,self.targetCol,self.nsample,self.delimiter)
+        self.data_decode = data_decode
+        self.records_d = records_d
+        self.list_discrete = discrete_cols
+        #model.model['encode'].fit([Xtrain_tuple, Xtrain_dummy],  **cpars)
+        #model.model['decode'].fit([Xtrain_tuple, Xtrain_dummy],  **cpars)
+        model1,scaling_factor = encode2(self.data_decode,self.list_discrete,self.records_d,plot)        
+        self.encoder_model = model1
+        self.scaling_factor = scaling_factor
+        model2 = decode2(self.data_decode, self.scaling_factor,self.list_discrete,self.records_d,plot=plot)
+        self.decoder_model = model2
+
+
+    def decode(self):
+        global Data_decompressed,Mask_decompressed
+        '''
+        This function will be using encode2 function defined above for encoding data.
+        This Model will create a parquet file of encoded columns
+
+        '''
+        decoded_array = self.decoder_model.im(Data_decompressed,Mask_decompressed)
+        parquetDic = {}
+        for i in range(decoded_array.shape[1]):
+            name = f'col_{i+1}'
+            parquetDic[name] = decoded_array[:,i]
+        print(f'Decoder Columns Shape {decoded_array.shape}')
+        log2(decoded_array)
+        ndarray_table = pa.table(parquetDic)
+        pq.write_table(ndarray_table,'my_decoder.parquet')
+        print('File my_decoder.parquet created')
+        
+
+    def encode(self):
+        global Data_decompressed
+        '''
+        This function will be using decoder2 function defined above for decoding data.
+        This Model will create a parquet file for decoded columns
+        
+        '''
+        
+        encoded_array = self.encoder_model.generateEncodings(Data_decompressed,Mask_decompressed)
+        parquetDic = {}
+        for i in range(encoded_array.shape[1]):
+            name = f'col_{i+1}'
+            parquetDic[name] = encoded_array[:,i]
+        print(f'Encoder Columns shape: {encoded_array.shape}')
+        log2(encoded_array)
+        ndarray_table = pa.table(parquetDic)
+        pq.write_table(ndarray_table,'my_encoder.parquet')
+        print('File my_encoder.parquet created')
+        
+
+
+#################################################################################################################################################################
+
+
+if __name__ == '__main__':
     #Instantiating Model
-    model = Model_custom()
+    model = Model()
 
     #Defining Data and Variables
     categories = ['job',"marital","education",'default','housing','loan','contact','month','day_of_week','poutcome','y']
@@ -734,11 +737,3 @@ def test():
 
     # Show Decode and Save File in .parquet file
     model.decode()
-
-
-
-#################################################################################################################################################################
-if __name__ == '__main__':
-    import fire
-    fire.Fire()
-

@@ -21,7 +21,7 @@ root = os.path.abspath(os.getcwd()).replace("\\", "/") + "/"
 # print(root)
 
 #### Debuging state (Ture/False)
-DEBUG_=True
+verbosity = 4
 
 ####################################################################################################
 ####################################################################################################
@@ -32,9 +32,12 @@ def log(*s, n=0, m=1):
     print(sjump, sspace, s, sspace, flush=True)
 
 def logs(*s):
-    if DEBUG_:
+    if verbosity > 0 :
         print(*s, flush=True)
 
+def log3(*s):
+    if verbosity > 2 :
+        print(*s, flush=True)
 
 def log_pd(df, *s, n=0, m=1):
     sjump = "\n" * m
@@ -194,6 +197,10 @@ def preprocess(path_train_X="", path_train_y="", path_pipeline_export="", cols_g
 
        dfi, col_pars = pipe_fun(df_, cols_list, pars= pars)
 
+
+       log3("dfi input", df_.columns, df_.shape, cols_name)
+       log3("dfi new",   dfi.columns, dfi.shape, col_pars)
+
        ## Check Index are matching for Later JOIN: Issues with Sampler, re-index !!!!!!
        if 'sampler' not in pipe_i['uri'] :
           dfi.index = df_.index
@@ -302,6 +309,8 @@ def preprocess_inference(df, path_pipeline="data/pipeline/pipe_01/", preprocess_
        dfi, col_pars             = pipe_fun(df_, cols_list, pars= pars)
 
        ## Check Index are matching for Later JOIN: Issues with Sampler, re-index !!!!!!
+       log3("dfi input", df_.columns, df_.shape, cols_name)
+       log3("dfi new",   dfi.columns, dfi.shape, col_pars)       
        if 'sampler' not in pipe_i['uri'] :
           dfi.index = df_.index
 

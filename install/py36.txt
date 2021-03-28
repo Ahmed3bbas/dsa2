@@ -1,3 +1,4 @@
+fire==0.4.0
 lightgbm==2.3.0
 scikit-learn==0.23.2
 #pandas==0.25.3
@@ -7,31 +8,40 @@ pandas-profiling
 #scipy==1.3.1
 pyro-ppl==1.5.0
 optuna==1.1.0
-fire==0.4.0
-pyarrow
+# fastparquet
 tqdm
 numba==0.50.1
 scipy>=0.19.1
 cloudpickle
+dill
+pyspark==2.4.0
+pyarrow>=0.10
+# koalas==1.7.0
+
+#####Tensorflow #####################################
+tensorflow_text>=2.0.0rc0
+keras==2.4.3
+
+#### Models
+#pyod==0.8.0
+umap
+imblearn
+umap
+
+##### Features
+category_encoders
 gplearn
 sympy
-dill
-#pyod==0.3.0
 #featuretools==0.13.3
 #featuretools-sklearn-transformer==0.1.0
 #featuretools-tsfresh-primitives==0.2.1
 #featuretools-update-checker==1.0.2
 #numba==0.48.0
-# fastparquet
+
+#### NLP
 nltk
-category_encoders
-imblearn
-umap
-pyspark==2.4.0
-pyarrow>=0.10
-koalas==1.7.0
-##########################################
-tensorflow_text>=2.0.0rc0
+
+#### Others
 # simpleneighbors[annoy]
 # cython
 #cycler==0.10.0

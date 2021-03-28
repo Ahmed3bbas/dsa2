@@ -15,24 +15,9 @@ from util_feature import  (save,  load, save_features, os_get_function_name,
                            params_check)
 import util_feature
 
+verbosity = 2
 ####################################################################################################
 ####################################################################################################
-"""
-from util import logger_class
-logger = logger_class()
-
-def log(*s):
-    logger.log(*s, level=1)
-
-def log2(*s):
-    logger.log(*s, level=2)
-
-def log_pd(df, *s, n=0, m=1):
-    sjump = "\n" * m
-    log(sjump,  df.head(n))
-"""
-
-
 def log(*s, n=0, m=1):
     sspace = "#" * n
     sjump = "\n" * m
@@ -40,7 +25,16 @@ def log(*s, n=0, m=1):
     print(sjump, sspace, *s, sspace, flush=True)
 
 def log2(*s, n=0, m=1):
-    print(*s, flush=True)
+    if verbosity >= 2: 
+      print(*s, flush=True)
+
+def log4(*s, n=0, m=1):
+    if verbosity >= 4: 
+     print(*s,"\n", flush=True)
+
+def log4_pd(name, df, *s):
+    if verbosity >= 4: 
+       print("\n",name, df.head(3),  df.shape, df.reset_index().dtypes )
 
 
 def _pd_colnum(df, col, pars):
@@ -475,8 +469,24 @@ def pd_colcross(df: pd.DataFrame, col: list=None, pars: dict=None):
 
     try :
        dfnum_hot = pars['dfnum_hot']
-       df_onehot = dfcat_hot.join(dfnum_hot, on=colid, how='left')
-    except :
+       dfnum_hot = dfnum_hot.drop_duplicates() ### Create bug if not unique ids
+       df_onehot = dfcat_hot.reset_index().join(dfnum_hot, on=[colid], how='left')
+       # df_onehot = pd.merge(dfcat_hot.reset_index(), dfnum_hot.reset_index() , on= [colid], how='left')
+
+       #log4_pd('df_onehot', df_onehot )
+       #log4(df_onehot.head(4).T )
+       assert set(dfcat_hot.index) == set(dfnum_hot.index), "Not equal index between dfcat_hot, dfnum_hot"
+       log4('index', colid, dfcat_hot.index)
+       log4(dfnum_hot.index)
+
+       # df_onehot = df_onehot.set_index(colid)
+       log4('colid', colid )
+       log4_pd('dfnum_hot', dfnum_hot )
+       log4_pd('dfcat_hot', dfcat_hot )
+
+
+    except Exception as e:
+       log4('error', e )
        df_onehot = copy.deepcopy(dfcat_hot)
 
     colcross_single = pars['colcross_single']
@@ -485,16 +495,22 @@ def pd_colcross(df: pd.DataFrame, col: list=None, pars: dict=None):
        colcross_single = load( pars['path_pipeline']  + f'/{prefix}_select.pkl')
        # pars_model      = load( pars['path_pipeline']  + f'/{prefix}_pars.pkl')
 
+    log4('colcross_single', colcross_single, len(colcross_single))
+
     colcross_single_onehot_select = []  ## Select existing columns
     for t in list(df_onehot.columns):
        for c1 in colcross_single:
            if c1 in t:
                colcross_single_onehot_select.append(t)
+    colcross_single_onehot_select = sorted(list(set(colcross_single_onehot_select)))
+    log4('colcross_single_select', colcross_single_onehot_select, len(colcross_single_onehot_select))
+
 
     df_onehot = df_onehot[colcross_single_onehot_select ]
+    log4_pd('df_onehot', df_onehot )
     dfcross_hot, colcross_pair = pd_feature_generate_cross(df_onehot, colcross_single_onehot_select,
                                                            **pars_model)
-    log(dfcross_hot.head(2).T)
+    log4_pd("dfcross_hot", dfcross_hot)
     colcross_pair_onehot = list(dfcross_hot.columns)
 
     model = None
