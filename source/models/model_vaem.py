@@ -1,4 +1,45 @@
-import numpy as np, sys,os, copy, random, pandas as pd, json
+# pylint: disable=C0321,C0103,C0301,E1305,E1121,C0302,C0330,C0111,W0613,W0611,R1705
+# -*- coding: utf-8 -*-
+"""
+TF 1.5 ONLY
+ipython source/models/keras_widedeep.py  test  --pdb
+
+
+
+"""
+import os, sys,copy, pathlib, pprint, json, pandas as pd, numpy as np, scipy as sci, sklearn
+
+####################################################################################################
+try   : verbosity = int(json.load(open(os.path.dirname(os.path.abspath(__file__)) + "/../../config.json", mode='r'))['verbosity'])
+except Exception as e : verbosity = 2
+#raise Exception(f"{e}")
+
+def log(*s):
+    print(*s, flush=True)
+
+def log2(*s):
+    if verbosity >= 2 : print(*s, flush=True)
+
+def log3(*s):
+    if verbosity >= 3 : print(*s, flush=True)
+
+def os_makedirs(dir_or_file):
+    if os.path.isfile(dir_or_file) :os.makedirs(os.path.dirname(os.path.abspath(dir_or_file)), exist_ok=True)
+    else : os.makedirs(os.path.abspath(dir_or_file), exist_ok=True)
+
+####################################################################################################
+global model, session
+def init(*kw, **kwargs):
+    global model, session
+    model = Model(*kw, **kwargs)
+    session = None
+
+def reset():
+    global model, session
+    model, session = None, None
+
+
+########Custom Model ################################################################################
 from scipy.stats import bernoulli
 from random import sample
 import matplotlib.pyplot as plt
@@ -6,18 +47,15 @@ from sklearn.model_selection import train_test_split
 import sklearn.preprocessing as preprocessing
 from sklearn.metrics import mean_squared_error
 from sklearn.feature_selection import mutual_info_regression, mutual_info_classif
-
-# tfd = tf.contrib.distributions
 import seaborn as sns; sns.set(style="ticks", color_codes=True)
-
 
 ### Need TF 1.4    pip install tensorflow=1.14
 import tensorflow as tf
 print(tf.__version__)
+assert "1."  in str(tf.version.VERSION), 'Compatible only with TF 1.5.1, keras 2.3.1, ' + str(tf.version.VERSION)
 
 thisfile_path = os.path.dirname(os.path.abspath(__file__)).replace("\\", "/")
 sys.path.append( thisfile_path + "/repo/VAEM/" )
-
 
 import utils.process as process
 import utils.params as params
@@ -27,30 +65,9 @@ import models.encoders as encoders
 import models.model as vae_model
 import utils.reward as reward
 
-#######################################################################################
-verbosity =2
-
-def log(*s):
-    print(*s, flush=True)
-
-def log2(*s):
-    if verbosity >= 2 :
-      print(*s, flush=True)
-
-
-#######################################################################################
-global model, session
-
-def init(*kw, **kwargs):
-    global model, session
-    model = Model(*kw, **kwargs)
-    session = None
-
 # Making Args Global Variable 
 args = params.Params('hyperparameters/bank_plot.json')
-
-if not os.path.exists(args.output_dir):
-    os.makedirs(args.output_dir)  
+os.makedirs(args.output_dir, exist_ok=True)
 rs = 42 # random seed
 fast_plot = 0
 
@@ -60,10 +77,12 @@ cols_ref_formodel = ['none']  ### No column group
 
 
 
-##################################################################################################################################
-def reset():
-    global model, session
-    model, session = None, None
+
+
+####################################################################################################
+class Model(object):
+    pass
+
 
 def save(path='', info=None):
     import dill as pickle, copy

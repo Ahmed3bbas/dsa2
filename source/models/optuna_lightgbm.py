@@ -11,36 +11,42 @@ https://github.com/optuna/optuna/blob/master/examples/lightgbm_tuner_simple.py
 
 
 """
-import os, pandas as pd, numpy as np, scipy as sci,sklearn
-from sklearn.linear_model import *
-from sklearn.svm import *
-from sklearn.tree import *
-
-from lightgbm import LGBMModel, LGBMRegressor, LGBMClassifier
-import optuna.integration.lightgbm as LGBMModel_optuna
-
+import os, sys,copy, pathlib, pprint, json, pandas as pd, numpy as np, scipy as sci, sklearn
 
 ####################################################################################################
-verbosity =3
+try   : verbosity = int(json.load(open(os.path.dirname(os.path.abspath(__file__)) + "/../../config.json", mode='r'))['verbosity'])
+except Exception as e : verbosity = 2
+#raise Exception(f"{e}")
 
 def log(*s):
     print(*s, flush=True)
 
 def log2(*s):
-    if verbosity>=2 : vprint(*s, flush=True)
+    if verbosity >= 2 : print(*s, flush=True)
 
+def log3(*s):
+    if verbosity >= 3 : print(*s, flush=True)
+
+def os_makedirs(dir_or_file):
+    if os.path.isfile(dir_or_file) :os.makedirs(os.path.dirname(os.path.abspath(dir_or_file)), exist_ok=True)
+    else : os.makedirs(os.path.abspath(dir_or_file), exist_ok=True)
 
 ####################################################################################################
 global model, session
-
 def init(*kw, **kwargs):
     global model, session
-    model   = Model(*kw, **kwargs)
+    model = Model(*kw, **kwargs)
     session = None
 
 def reset():
     global model, session
     model, session = None, None
+
+
+########Custom Model ################################################################################
+from lightgbm import LGBMModel, LGBMRegressor, LGBMClassifier
+import optuna.integration.lightgbm as LGBMModel_optuna
+
 
 
 ####################################################################################################
@@ -192,7 +198,6 @@ def get_dataset(data_pars=None, task_type="train", **kw):
         raise Exception(f' {data_type} data_type Not implemented ')
 
     raise Exception(f' Requires  Xtrain", "Xtest", "ytrain", "ytest" ')
-
 
 
 ####################################################################################################################

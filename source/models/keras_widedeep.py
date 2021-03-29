@@ -10,33 +10,28 @@ pip install Keras==2.4.3
 
 
 """
-import os, pandas as pd, numpy as np, sklearn, copy, pathlib, pprint
-from sklearn.model_selection import train_test_split
-
-import tensorflow as tf
-tf.compat.v1.enable_eager_execution()
-from tensorflow import feature_column
-from tensorflow import keras
-from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
-from tensorflow.keras import layers
+import os, sys,copy, pathlib, pprint, json, pandas as pd, numpy as np, scipy as sci, sklearn
 
 ####################################################################################################
-verbosity = 1
+try   : verbosity = int(json.load(open(os.path.dirname(os.path.abspath(__file__)) + "/../../config.json", mode='r'))['verbosity'])
+except Exception as e : verbosity = 2
+#raise Exception(f"{e}")
 
 def log(*s):
     print(*s, flush=True)
 
 def log2(*s):
-    if verbosity >= 2 :
-      print(*s, flush=True)
+    if verbosity >= 2 : print(*s, flush=True)
 
 def log3(*s):
-    if verbosity >= 3 :
-      print(*s, flush=True)
+    if verbosity >= 3 : print(*s, flush=True)
+
+def os_makedirs(dir_or_file):
+    if os.path.isfile(dir_or_file) :os.makedirs(os.path.dirname(os.path.abspath(dir_or_file)), exist_ok=True)
+    else : os.makedirs(os.path.abspath(dir_or_file), exist_ok=True)
 
 ####################################################################################################
 global model, session
-
 def init(*kw, **kwargs):
     global model, session
     model = Model(*kw, **kwargs)
@@ -47,18 +42,27 @@ def reset():
     model, session = None, None
 
 
+########Custom Model ################################################################################
+from sklearn.model_selection import train_test_split
+
+import tensorflow as tf
+tf.compat.v1.enable_eager_execution()
+from tensorflow import feature_column
+from tensorflow import keras
+from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
+from tensorflow.keras import layers
+
 
 ####################################################################################################
 cols_ref_formodel = ['colcontinuous','colsparse']
 
 def WideDeep_sparse(model_pars2):
-    """
+    """ Using TF feature column sparse tensor
     """
     loss             = model_pars2.get('loss', 'binary_crossentropy')
     optimizer        = model_pars2.get('optimizer', 'adam')
     metrics          = model_pars2.get('metrics', ['accuracy'])
     dnn_hidden_units = model_pars2.get('hidden_units', '64,32,16')
-
 
     if model_pars2.get('create_tensor', True) :
         #### To plug into Model   #####################################################################
@@ -241,12 +245,12 @@ def load_model(path=""):
 
 def model_summary(path="ztmp/"):
     global model
-    os.makedirs(path, exist_ok=True)
-    try :
-      tf.keras.utils.plot_model(model.model, f'{path}/model.png', show_shapes=False, rankdir='LR')
-      tf.keras.utils.plot_model(model.model, f'{path}/model_shapes.png', show_shapes=True, rankdir='LR')
-    except Exception as e :
-      log("error", e)  
+    # os.makedirs(path, exist_ok=True)
+    # try :
+    #  tf.keras.utils.plot_model(model.model, f'{path}/model.png', show_shapes=False, rankdir='LR')
+    # tf.keras.utils.plot_model(model.model, f'{path}/model_shapes.png', show_shapes=True, rankdir='LR')
+    #except Exception as e :
+    #  log("error", e)  
 
 
 ########################################################################################################################
@@ -520,9 +524,7 @@ def test(config=''):
         'cols_input_type' : cols_input_type_1,
         ### family of columns for MODEL  #########################################################
          'cols_model_group': [ 'colnum_bin',   'colcat_bin', ]
-        ,'cols_model_group_custom' :  { 'colnum' : colnum,
-                                        'colcat' : colcat,
-                                        'coly' : coly  }
+
         ####### ACTUAL data pipeline #############################################################
         ,'train':   {} #{'X_train': train_df,'Y_train':train_label, 'X_test':  val_df,'Y_test':val_label }
         ,'val':     {}  #{  'X':  val_df ,'Y':val_label }
@@ -589,16 +591,15 @@ def test(config=''):
     test_helper( m['model_pars'], m['data_pars'], m['compute_pars'])
     """
 
+
 def test2(config=''):
     """
     """
-    df, colnum, colcat, coly = test_dataset_petfinder()
+    df, colnum, colcat, coly, colembed = test_dataset_petfinder()
 
     #### For pipeline data feed ###############################################################################
     prepare = tf_FeatureColumns()
-    # prepare.splitData()
     train_df,test_df,val_df = prepare.data_to_tensorflow(df, target='y')
-
 
     #### To plug into Model   ##################################################################################
     prepare = tf_FeatureColumns()
@@ -636,11 +637,11 @@ def test2(config=''):
                 'test': test_df,
                 'val': val_df }
 
-
     compute_pars = {'epochs':2, 'verbose': 1,'path_checkpoint': 'checkpoint/model.pth','probability':True}
 
     ######## Run ##########################################################
     test_helper(model_pars, data_pars, compute_pars)
+
 
 
 def test_helper(model_pars, data_pars, compute_pars):
@@ -663,7 +664,7 @@ def test_helper(model_pars, data_pars, compute_pars):
     log(model.model.summary())
 
     log('Model Snapshot')
-    model_summary()
+    # model_summary()
 
 
 ####################################################################################################################

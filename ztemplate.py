@@ -11,7 +11,20 @@ Template explanation
 source/models/mymodel.py
   Meta Class Model wraps sub-models
       Global variable : model, session  stores Model
+    #### 1. Global variables    : global variables **model** and **session**.
+    #### 2.  init method        : init method to initialize global variables `model and session`
+    #### 3. class Model         :   storing model details and parameters.
+    #### 4. preprocess method   :   preprocessing dataset.
+    #### 5. fit method          :   fitting the defined model and inputted data.
+    #### 6. predict method      :   predicting using the fitted model.
+    #### 7. save method         :   saving the model in the pickle file.
+    #### 8. load_model method   :   loading, the model saved in a pickle file.
+    #### 9. load_info method    :   loading the in mation stored in the pickle file.
+    #### 10. get_dataset method :   retrieving the dataset.
+    #### 11. get_params method  :   retrieving parameters.
 
+
+Big dictionnary :    
   model_pars :   Aribitrary dict for model params
   compute_pars:  Arbitrary dict for  compute (ie epochs=1)
   data_pars:     Arbitrary dict for data definition
@@ -65,6 +78,8 @@ class MY_MODEL_CLASS(object):
         """
         n_wide = cpars['n_wide']
         ###### Your model Definition
+
+
 
 
 

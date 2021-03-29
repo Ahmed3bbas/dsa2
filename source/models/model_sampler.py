@@ -1,22 +1,53 @@
 # pylint: disable=C0321,C0103,C0301,E1305,E1121,C0302,C0330,C0111,W0613,W0611,R1705
 # -*- coding: utf-8 -*-
 """
-Genreate  train_data  ---> New train data by sampling
-cd source/
-python source/model_sampler.py test
-Transformation for ALL Columns :
-   Increase samples, Reduce Samples.
+Genreate New train_data  by sampling existing data.
+
+python model_sampler.py test
+
+Transformation for ALL Columns :   Increase samples, Reduce Samples.
+
+WARNING :
 Main isssue is the number of rows change  !!!!
   cannot merge with others
   --> store as train data
   train data ---> new train data
   Transformation with less rows !
-2 usage :
-    Afte preprocessing, over sample, under-sample.
-"""
-import os, sys, copy
-import pandas as pd, numpy as np,  sklearn
 
+"""
+import os, sys,copy, pathlib, pprint, json, pandas as pd, numpy as np, scipy as sci, sklearn
+
+####################################################################################################
+try   : verbosity = int(json.load(open(os.path.dirname(os.path.abspath(__file__)) + "/../../config.json", mode='r'))['verbosity'])
+except Exception as e : verbosity = 4
+#raise Exception(f"{e}")
+
+def log(*s):
+    print(*s, flush=True)
+
+def log2(*s):
+    if verbosity >= 2 : print(*s, flush=True)
+
+def log3(*s):
+    if verbosity >= 3 : print(*s, flush=True)
+
+def os_makedirs(dir_or_file):
+    if os.path.isfile(dir_or_file) :os.makedirs(os.path.dirname(os.path.abspath(dir_or_file)), exist_ok=True)
+    else : os.makedirs(os.path.abspath(dir_or_file), exist_ok=True)
+
+####################################################################################################
+global model, session
+def init(*kw, **kwargs):
+    global model, session
+    model = Model(*kw, **kwargs)
+    session = None
+
+def reset():
+    global model, session
+    model, session = None, None
+
+
+########Custom Model ################################################################################
 sys.path.append( os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + "/")
 ### import util_feature
 
@@ -47,32 +78,8 @@ from imblearn.under_sampling import NearMiss
 
 ####################################################################################################
 # CONSTANTS
-SDV_MODELS = ['TVAE', 'CTGAN', 'PAR'] # The Synthetic Data Vault Models
+SDV_MODELS      = ['TVAE', 'CTGAN', 'PAR'] # The Synthetic Data Vault Models
 IMBLEARN_MODELS = ['SMOTE', 'SMOTEENN', 'SMOTETomek', 'NearMiss']
-verbosity = 3
-
-def log(*s):
-    print(*s, flush=True)
-
-
-def log2(*s):
-    if verbosity >= 2 :
-       print(*s, flush=True)
-
-
-def log3(*s):
-    if verbosity >= 3 :
-       print(*s, flush=True)
-
-
-
-####################################################################################################
-global model, session
-
-def init(*kw, **kwargs):
-    global model, session
-    model   = Model(*kw, **kwargs)
-    session = None
 
 
 ####################################################################################################
@@ -86,7 +93,6 @@ class Model(object):
             model_class = globals()[model_pars['model_class']]
             self.model  = model_class(**model_pars['model_pars'])
             log2(model_class, self.model)
-
 
 
 def fit(data_pars: dict=None, compute_pars: dict=None, out_pars: dict=None, **kw):
@@ -141,7 +147,6 @@ def transform(Xpred=None, data_pars={}, compute_pars={}, out_pars={}, **kw):
     :param kw:
     :return:
     """
-
     global model, session
     name = model.model_pars['model_class']
 
@@ -155,7 +160,7 @@ def transform(Xpred=None, data_pars={}, compute_pars={}, out_pars={}, **kw):
 
     else :
         cols_type         = data_pars['cols_model_type2']
-        cols_ref_formodel = cols_type
+        cols_ref_formodel = cols_type  ### Always match with feeded cols_type
         split             = kw.get("split", False)
 
         if name in IMBLEARN_MODELS:
@@ -192,11 +197,6 @@ def predict(Xpred=None, data_pars={}, compute_pars={}, out_pars={}, **kw):
     ### No need
 
 
-def reset():
-    global model, session
-    model, session = None, None
-
-
 def save(path=None, info=None):
     global model, session
     import cloudpickle as pickle
@@ -206,7 +206,7 @@ def save(path=None, info=None):
     pickle.dump(model, open(f"{path}/{filename}", mode='wb'))  # , protocol=pickle.HIGHEST_PROTOCOL )
 
     filename = "info.pkl"
-    pickle.dump(info, open(f"{path}/{filename}", mode='wb'))  # ,protocol=pickle.HIGHEST_PROTOCOL )
+    pickle.dump(info, open(f"{path}/{filename}", mode='wb'))   # ,protocol=pickle.HIGHEST_PROTOCOL )
 
 
 def load_model(path=""):
@@ -304,7 +304,8 @@ def get_dataset(data_pars=None, task_type="train", **kw):
     raise Exception(f' Requires  Xtrain", "Xtest", "ytrain", "ytest" ')
 
 
-
+##################################################################################################################
+##################################################################################################################
 def test():
     from sklearn.datasets import make_classification
     from sklearn.model_selection import train_test_split
@@ -373,12 +374,9 @@ def test():
     #             },
     #             }
     # test_helper(model_pars, data_pars, compute_pars)
-
     log("test 5")
 
-
-
-    
+    #####################################################################
     # log("test 2 --> CTGAN")
     # model_pars = {'model_class': 'CTGAN',
     #               'model_pars': {
@@ -441,6 +439,103 @@ def test():
 
 
 
+
+
+def test_dataset_classi_fake(nrows=500):
+    from sklearn import datasets as sklearn_datasets
+    ndim=11
+    coly   = 'y'
+    colnum = ["colnum_" +str(i) for i in range(0, ndim) ]
+    colcat = ['colcat_1']
+    X, y    = sklearn_datasets.make_classification(
+              n_samples=10000, n_features=ndim, n_classes=1, n_redundant = 0, n_informative=ndim )
+    df = pd.DataFrame(X,  columns= colnum)
+    for ci in colcat :
+      df[ci] = np.random.randint(0,1, len(df))
+    df[coly]   = y.reshape(-1, 1)
+    # log(df)
+    return df, colnum, colcat, coly
+
+
+def train_test_split2(df, coly):
+    from sklearn.model_selection import train_test_split
+    log3(df.dtypes)
+    y = df[coly] ### If clonassificati
+    X = df.drop(coly,  axis=1)
+    log3('y', np.sum(y[y==1]) , X.head(3))
+    ######### Split the df into train/test subsets
+    X_train_full, X_test, y_train_full, y_test = train_test_split(X, y, test_size=0.05, random_state=2021)
+    X_train, X_valid, y_train, y_valid         = train_test_split(X_train_full, y_train_full, random_state=2021)
+
+    #####
+    # y = y.astype('uint8')
+    num_classes                                = len(set(y_train_full.values.ravel()))
+
+    return X,y, X_train, X_valid, y_train, y_valid, X_test,  y_test, num_classes
+
+
+
+def test2(n_sample          = 1000):
+    df, colnum, colcat, coly = test_dataset_classi_fake(nrows= n_sample)
+    X,y, X_train, X_valid, y_train, y_valid, X_test,  y_test, num_classes  = train_test_split2(df, coly)
+
+    #### Matching Big dict  ##################################################
+    def post_process_fun(y): return int(y)
+    def pre_process_fun(y):  return int(y)
+
+    m = {'model_pars': {
+        'model_class':  "model_sampler.py::XXXXXX"
+        ,'model_pars' : {}
+        , 'post_process_fun' : post_process_fun   ### After prediction  ##########################################
+        , 'pre_process_pars' : {'y_norm_fun' :  pre_process_fun ,  ### Before training  ##########################
+
+        ### Pipeline for data processing ##############################
+        'pipe_list': [  #### coly target prorcessing
+            {'uri': 'source/prepro.py::pd_coly',                 'pars': {}, 'cols_family': 'coly',       'cols_out': 'coly',           'type': 'coly'         },
+            {'uri': 'source/prepro.py::pd_colnum_bin',           'pars': {}, 'cols_family': 'colnum',     'cols_out': 'colnum_bin',     'type': ''             },
+            {'uri': 'source/prepro.py::pd_colcat_bin',           'pars': {}, 'cols_family': 'colcat',     'cols_out': 'colcat_bin',     'type': ''             },
+        ],
+        }
+        },
+
+    'compute_pars': { 'metric_list': ['accuracy_score','average_precision_score'],
+                      'compute_pars' : {'epochs': 1 },
+                    },
+
+    'data_pars': { 'n_sample' : n_sample,
+        'download_pars' : None,
+        'cols_input_type' : {
+            'colcat' : colcat,
+            'colnum' : colnum,
+            'coly'  :  coly,
+        },
+        ### family of columns for MODEL  #########################################################
+        'cols_model_group': [ 'colnum_bin',   'colcat_bin',  ],
+
+        ### Added continuous & sparse features groups ###
+        'cols_model_type2': {
+            'colcontinuous':   colnum ,
+            'colsparse' :      colcat,
+        }
+
+        ### Filter data rows   ##################################################################
+        ,'filter_pars': { 'ymax' : 2 ,'ymin' : -1 }
+
+
+        ###################################################
+        ,'train':   {'Xtrain': X_train,  'ytrain': y_train, 'Xtest':  X_valid,  'ytest':  y_valid}
+        ,'eval':    {'X': X_valid,  'y': y_valid}
+        ,'predict': {}
+
+        ,'task_type' : 'train', 'data_type': 'ram'
+
+        }
+    }
+
+    ###  Tester #########################################################
+    test_helper(m['model_pars'], m['data_pars'], m['compute_pars'])
+
+
 def test_helper(model_pars, data_pars, compute_pars):
     global model, session
     root  = "ztmp/"
@@ -462,7 +557,6 @@ def test_helper(model_pars, data_pars, compute_pars):
     log('Load model..')
     model, session = load_model(path= root + "/model_dir/")
     log(model)
-
 
 
 

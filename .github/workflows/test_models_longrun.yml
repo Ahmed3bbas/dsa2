@@ -1,24 +1,18 @@
-name: test_full
-
+name: test_models_longrun
 ###  https://github.com/arita37/awesome-actions#static-analysis
 
 on:
   push:
     branches:
-      - run_train
+      - main
       - multi
-      - benchmark
-      - colab
-
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v1
-   
     - name: Set up Python 3.6.*
       uses: actions/setup-python@v1
       with:
@@ -27,9 +21,7 @@ jobs:
     - name: Install pipenv
       uses: dschep/install-pipenv-action@v1
       
-
     ##### Log Start  ######################################################
-
     #- name: ssh_gen
     #  uses: webfactory/ssh-agent@v0.2.0
       #with:
@@ -42,8 +34,6 @@ jobs:
            # cd /home/runner/work/mlmodels/mlmodels/
 
     ########################################################################
-                
-
     # - name: log_start
     #  run: |
     #       cd /home/runner/work/mlmodels/  && git clone git@github.com:arita37/mlmodels_store.git  &&  ls && pwd
@@ -58,16 +48,12 @@ jobs:
     #    restore-keys: |
     #      ${{ runner.os }}-pip-
    
-
-
     - name: Cache pipenv virtualenv
       id: cache-pipenv
       uses: actions/cache@v1
       with:
         path: /opt/hostedtoolcache/Python/
         key: ${{ runner.os }}-pipenv-${{ hashFiles('**/install/py36.txt') }}
-
-
           
 
     - name: Install numpy
@@ -90,114 +76,119 @@ jobs:
     #- name: Install repo
     #  run: pip install -e . -r install/py36.txt  --no-deps
 
-
-
-
     # - name: log_start
     #  run: ml_test --do log_remote_start
 
 
     - name: test_import
       run: |
-           python -c "import core_run;   print(core_run)"
            python -c "import os, numpy ; print(os)"
+           conda list
+           pip list
            # python -c "import tensorflow, torch ; print(tensorflow); print(torch)"
 
-    ########  Test running 
-    - name: run_mlflow
-      run: chmod -R 777 . && ztest/test_mlflow.sh   # 2>&1 | tee   /home/runner/work/mlmodels/mlmodels_store/log_import/log_optim.py
 
-      
-    ########  Test running 
-    #- name: run_all
-    #  run: chmod -R 777 . && ztest/run_full.sh   # 2>&1 | tee   /home/runner/work/mlmodels/mlmodels_store/log_import/log_optim.py
+    #############################################################################################
+    ########  Test running  with epochs= 50  ####################################################
+    #- name: run_models
+    #  run: chmod -R 777 . && ztest/run_models.sh   # 2>&1 | tee   /home/runner/work/mlmodels/mlmodels_store/log_import/log_optim.py
 
-    - name: python  example/test_hyperopt.py  hyperparam  --ntrials 1  
+    - name: python model_vaemdn.py test
+      # continue-on-error: true
+      run:  cd source/models && ipython model_vaemdn.py test3
+
+
+    - name: python torch_tabular.py test
+      # continue-on-error: true
+      run:  cd source/models && ipython torch_tabular.py test3
+
+
+
+    - name: python keras_widedeep.py  test
+      continue-on-error: true
+      run:  |
+            cd source/models && ipython keras_widedeep.py  test3
+            echo "keras_widedeep.py" >> file_check.txt
+      ## ipython keras_widedeep.py  test2
+
+    - name: python keras_widedeep_dense.py  test
       # continue-on-error: true
       run:  |
-            python  example/test_hyperopt.py  hyperparam  --ntrials 1 
+            cd source/models && ipython keras_widedeep_dense.py  test3
+            echo "keras_widedeep_dense.py" >> file_check.txt
 
 
-    - name: python example/test_mkeras.py  train    --config config1  
+    - name: python model_bayesian_numpyro.py test
+      continue-on-error: true
+      run:  cd source/models && ipython model_bayesian_pyro.py test3  && echo "model_bayesian_pyro.py" >> file_check.txt
+
+
+    - name: python model_bayesian_pyro.py test
+      # continue-on-error: true
+      run:  cd source/models && ipython model_bayesian_pyro.py test3 && echo "model_bayesian_pyro.py" >> file_check.txt
+
+
+    - name: python model_gefs.py test
+      # continue-on-error: true
+      run:  cd source/models && ipython model_gefs.py test3   && echo "model_gefs.py" >> file_check.txt
+
+
+    - name: python model_sklearn.py test
+      continue-on-error: true
+      run:  cd source/models && ipython model_sklearn.py test3
+
+
+    - name: python model_tseries.py test
+      continue-on-error: true
+      run:  cd source/models && ipython model_tseries.py test3
+
+
+    - name: python model_vaem.py test
+      continue-on-error: true
+      run:  cd source/models && ipython model_vaem.py test3
+
+
+
+
+
+    - name: python torch_rvae.py test 
       # continue-on-error: true
       run:  |
-            python example/test_mkeras.py  train    --config config1
-            python example/test_mkeras.py  predict    --config config1 
+            cd source/models && ipython torch_rvae.py test3
+      ## ipython torch_rvae.py test
 
 
-    - name: python   example/test_automl.py  train   
-      # continue-on-error: true
-      run:  |
-            python   example/test_automl.py  train       --nsample 200
-            python   example/test_automl.py  predict     --nsample 200 
-
-
-    - name: python example/regress/regress_salary.py
+    - name: python optuna_lightgbm.py test
       continue-on-error: true
-      run:  |
-            python example/regress/regress_salary.py  train   --nsample 1000    
-            python example/regress/regress_salary.py  predict  --nsample 1000 
-            python example/regress/regress_cardif.py  train   --nsample 1000
+      run:  cd source/models && ipython optuna_lightgbm.py test3
 
 
-    - name: python example/regress/regress_airbnb.py   
+    - name: python model_sampler.py test
       continue-on-error: true
-      run:  |
-            python example/regress/regress_airbnb.py  train   --nsample 20000  
-            python example/regress/regress_airbnb.py  predict  --nsample 5000
+      run:  cd source/models && ipython model_sampler.py test3
 
 
-    - name: python tseries.py  train      --config  config1 
+    - name: python model_encoder.py test
       continue-on-error: true
-      run:  |
-            python tseries.py  train      --config  config1
-
-
-    - name: python example/classifier/classifier_income.py 
-      continue-on-error: true
-      run:  |
-            python example/classifier/classifier_income.py  train    --nsample 1000
-            python example/classifier/classifier_income.py  predict  --nsample 1000
+      run:  cd source/models && ipython model_encoder.py test3
 
 
 
 
-# python example/regress/regress_salary.py  train   --nsample 1000
-# python example/regress/regress_salary.py  predict  --nsample 1000
-
-# python example/regress/regress_cardif.py  train   --nsample 1000
-
-
-# python example/regress/regress_airbnb.py  train   --nsample 20000
-# python example/regress/regress_airbnb.py  predict  --nsample 5000
 
 
 
-# python example/classifier/classifier_income.py  train    --nsample 1000   ;
-# python example/classifier/classifier_income.py  predict  --nsample 1000   ;
 
 
-### HyperOpt optuna testing
-# python  example/test_hyperopt.py  hyperparam  --ntrials 1
-
-### Keras model test
-# python example/test_mkeras.py  train    --config config1
-
-
-### Time Series Prediction
-# python tseries.py  train      --config  config1
-         
 
     #- name: ml_test_function
     #  run: ml_test --do test_functions    2>&1 | tee  cd /home/runner/work/mlmodels/mlmodels_store/log_import/log_functions.py
 
 
-
-
     #- name: ml_test
     #  run: ml_test
-      
-        
+
+
 
     #- name: log_gitcommit
     #  run: |

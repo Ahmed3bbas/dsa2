@@ -6,7 +6,39 @@ python torch_rvae.py test2 --nrows 1000
 
 
 """
-import os, sys,  numpy as np,  pandas as pd, copy, errno, json
+import os, sys,copy, pathlib, pprint, json, pandas as pd, numpy as np, scipy as sci, sklearn
+
+####################################################################################################
+try   : verbosity = int(json.load(open(os.path.dirname(os.path.abspath(__file__)) + "/../../config.json", mode='r'))['verbosity'])
+except Exception as e : verbosity = 2
+#raise Exception(f"{e}")
+
+def log(*s):
+    print(*s, flush=True)
+
+def log2(*s):
+    if verbosity >= 2 : print(*s, flush=True)
+
+def log3(*s):
+    if verbosity >= 3 : print(*s, flush=True)
+
+def os_makedirs(dir_or_file):
+    if os.path.isfile(dir_or_file) :os.makedirs(os.path.dirname(os.path.abspath(dir_or_file)), exist_ok=True)
+    else : os.makedirs(os.path.abspath(dir_or_file), exist_ok=True)
+
+####################################################################################################
+global model, session
+def init(*kw, **kwargs):
+    global model, session
+    model = Model(*kw, **kwargs)
+    session = None
+
+def reset():
+    global model, session
+    model, session = None, None
+
+
+########Custom Model ################################################################################
 from pathlib import Path
 from collections import namedtuple
 
@@ -19,24 +51,12 @@ from torch import nn
 from torch import optim
 from torch.nn import functional as F
 
+##### Add custom repo to Python Path ################################################################
+thisfile_dirpath = os.path.dirname(os.path.abspath(__file__)).replace("\\", "/")
+import_path      = thisfile_dirpath + "/repo/RVAE_MixedTypes/src/"
+sys.path.append(import_path)
 
-######################################################################################################
-curr_path_path = os.path.dirname(os.path.abspath(__file__))
-curr_path_path = curr_path_path.replace("\\", "/")
-repo_path      = os.path.join(curr_path_path, "repo/RVAE_MixedTypes/src/")
-sys.path.append( repo_path)
-print( repo_path )
-#repo_path      =os.path.join(curr_path_path, "repo/RVAE_MixedTypes/src/core_models/")
-#sys.path.append( repo_path)
-
-
-
-root     = os.path.dirname(os.path.abspath(__file__))
-path_pkg =  root + "/repo/RVAE_MixedTypes/"
-
-
-
-##### from src/core_models
+##### Import from src/core_models/
 from core_models import main, train_eval_models
 from core_models.model_utils import nll_categ_global, nll_gauss_global
 from core_models.EmbeddingMul import EmbeddingMul
@@ -45,27 +65,10 @@ from core_models.train_eval_models import training_phase, evaluation_phase, repa
 from core_models import utils
 print(utils)
 
-
+path_pkg =  thisfile_dirpath + "/repo/RVAE_MixedTypes/"
 
 
 ####################################################################################################
-VERBOSE = False
-
-def log(*s):
-    print(*s, flush=True)
-
-def log2(*s):
-    if VERBOSE :
-      print(*s, flush=True)
-
-####################################################################################################
-global model, session
-
-def init(*kw, **kwargs):
-    global model, session
-    model, session = Model(*kw, **kwargs), None
-
-
 class Model(object):
     def __init__(self, model_pars=None, data_pars=None, compute_pars=None, global_pars=None):
         self.model_pars, self.compute_pars, self.data_pars, self.global_pars = model_pars, compute_pars, data_pars, global_pars
@@ -73,32 +76,29 @@ class Model(object):
             self.model = None
             return 
 
-
         # Fuse all params for RVAE 
         model_pars2 = copy.deepcopy(self.model_pars['model_pars'])
         model_pars2.update(self.compute_pars['compute_pars'])
-        model_pars2.update(self.compute_pars['log'])
+        model_pars2.update(self.compute_pars['compute_extra'])
         model_pars2.update(self.data_pars)
         model_pars2.update(self.global_pars)
 
     
         self.args = namedtuple("args", model_pars2.keys())(*model_pars2.values())
         self.model = RVAE( args=self.args)
-        
-        if VERBOSE: log(self.model)
+        log2(self.model)
 
 
 
 def get_dataset(data_pars, task_type="train"):
     """
-
     :param data_pars:
     :param task_type:
     :return:
     """
-    clean       = data_pars.get('clean', True)
-    data_path   = data_pars["data_path"]
-    batch_size  = data_pars["batch_size"]
+    clean       = data_pars["data_pars"].get('clean', True)
+    data_path   = data_pars["data_pars"]["data_path"]
+    batch_size  = data_pars["data_pars"]["batch_size"]
 
     if task_type == 'pred_encode':
             train_loader, X_train, target_errors_train, dataset_obj,  attributes = utils.load_data(data_path, batch_size,
@@ -154,8 +154,6 @@ def get_dataset(data_pars, task_type="train"):
 
             return X_test_clean
         
-        
-
 
 def fit(data_pars=None, compute_pars=None, out_pars=None, **kw):
     """
@@ -169,6 +167,7 @@ def fit(data_pars=None, compute_pars=None, out_pars=None, **kw):
     model.model.train_loader = train_loader
     model.model.dataset_obj = dataset_obj
     model.model.fit()
+
 
 
 def encode(Xpred=None, data_pars: dict={}, compute_pars: dict={}, out_pars: dict={}, **kw):
@@ -187,8 +186,7 @@ def encode(Xpred=None, data_pars: dict={}, compute_pars: dict={}, out_pars: dict
 
 
 def decode(Xpred=None, data_pars: dict={}, compute_pars: dict={}, out_pars: dict={}, **kw):
-    """
-       Specify the format required   due to sampling
+    """ Specify the format required   due to sampling
     :param Xpred:
     :param data_pars:
     :param compute_pars:
@@ -367,13 +365,6 @@ def eval(Xpred=None, data_pars: dict={}, compute_pars: dict={}, out_pars: dict={
     log('\nDecoded : ', Xnew_original)
 
 
-
-
-def reset():
-    global model, session
-    model, session = None, None
-
-
 def save(path=None, info=None):
     """ Custom saving
     """
@@ -431,8 +422,7 @@ def get_dataset_tuple(Xtrain, cols_type_received, cols_ref):
 
 
 def get_dataset2(data_pars=None, task_type="train", **kw):
-    """
-      return tuple of dataframes
+    """  Return tuple of dataframes
     """
     # log(data_pars)
     data_type = data_pars.get('type', 'ram')
@@ -478,32 +468,19 @@ def get_dataset2(data_pars=None, task_type="train", **kw):
 ####################################################################################################
 ############ Test  #################################################################################
 def test(nrows=1000):
-    """
-        nrows : take first nrows from dataset
+    """nrows : take first nrows from dataset
     """
     global model, session
     m = {'model_pars': {
             # Specify the model
             'model_class':  "torch_tabular.py::RVAE",
-            # "load_model":False, 
-            # "load_model_path":None,
-
-            'model_pars' : {
-                "activation":'relu',
-                "outlier_model":'RVAE',
-                "AVI":False,
-                "alpha_prior":0.95,
-                "embedding_size":50,
-                "is_one_hot":False,
-                "latent_dim":20,
-                "layer_size":400,
-            }
-
-          
+            'model_pars' : {"activation":'relu', "outlier_model":'RVAE', "AVI":False, "alpha_prior":0.95, 
+                            "embedding_size":50, "is_one_hot":False, "latent_dim":20, "layer_size":400,
+            }          
         },
 
         'compute_pars': {
-            'log' :{
+            'compute_extra' :{
                 "log_interval":50,
                 "save_on":True,
                 "verbose_metrics_epoch":True,
@@ -516,12 +493,7 @@ def test(nrows=1000):
                 "batch_size":150,
             },
 
-            'metric_list': [
-                'accuracy_score',
-                'average_precision_score'
-            ],
-
-            
+            'metric_list': ['accuracy_score', 'average_precision_score' ],            
         },
 
         'data_pars': { 
@@ -537,7 +509,6 @@ def test(nrows=1000):
             "output_path": path_pkg + '/outputs_experiments_i/Wine/gaussian_m0s5_categorical_alpha0.0/5pc_rows_20pc_cols_run_1/RVAE_CVI',
 
         }
-        
     }
     test_helper(m)
 
@@ -545,37 +516,20 @@ def test(nrows=1000):
 
 
 def test2(nrows=1000):
-   
     """
-        nrows : take first nrows from dataset
     """
     global model, session
-    # print("\n\nPKG : ",path_pkg.replace("\\","/"),"\n\n")
-
-    # from pmlb import fetch_data
-
     m = {'model_pars': {
             # Specify the model
             'model_class':  "torch_tabular.py::RVAE",
-            # "load_model":False, 
-            # "load_model_path":None,
-
             'model_pars' : {
-                "activation":'relu',
-                "outlier_model":'RVAE',
-                "AVI":False,
-                "alpha_prior":0.95,
-                "embedding_size":50,
-                "is_one_hot":False,
-                "latent_dim":20,
-                "layer_size":400,
+                "activation":'relu', "outlier_model":'RVAE', "AVI":False, "alpha_prior":0.95,
+                "embedding_size":50, "is_one_hot":False, "latent_dim":20, "layer_size":400,
             }
-
-          
         },
 
         'compute_pars': {
-            'log' :{
+            'compute_extra' :{
                 "log_interval":50,
                 "save_on":True,
                 "verbose_metrics_epoch":True,
@@ -588,20 +542,18 @@ def test2(nrows=1000):
                 "batch_size":150,
             },
 
-            'metric_list': [
-                'accuracy_score',
-                'average_precision_score'
-            ],
+            'metric_list': ['accuracy_score', 'average_precision_score'],
 
-            
         },
-        'data_pars': { 
-            # Raw dataset, pre preprocessing
-            "dataset_path" : os.path.join(path_pkg.replace("\\","/"), "data_simple/adult/"),
-            "batch_size":150,   ### Mini Batch from data
-            # Needed by getdataset
-            "clean" : False,
-            "data_path":   path_pkg + '/data_simple/Adult/gaussian_m0s5_categorical_alpha0.0/5pc_rows_20pc_cols_run_1/',
+        'data_pars': {
+            'data_pars' :{
+                # Raw dataset, pre preprocessing
+                "dataset_path" : path_pkg + "/data_simple/Adult/",
+                "batch_size":150,   ### Mini Batch from data
+                # Needed by getdataset
+                "clean" : False,
+                "data_path":   path_pkg + '/data_simple/Adult/gaussian_m0s5_categorical_alpha0.0/5pc_rows_20pc_cols_run_1/',
+            }
 
         },
         
@@ -613,22 +565,20 @@ def test2(nrows=1000):
         
     }
 
-    # Preprocess the dataset
-    os.system(f"python ./repo/RVAE_MixedTypes/src/dataset_prep_simple/noising_process.py --input-path {m['data_pars']['dataset_path']}")
+    #### Preprocess the dataset
+    dataset_path = m['data_pars']['data_pars']['dataset_path']
+    print("\n\nDATASET : ", dataset_path)
+    cmd= f"python {path_pkg}/src/dataset_prep_simple/noising_process.py --input-path { dataset_path }"
+    os.system(cmd)
+
+    ### Train
     test_helper(m)
-
-
-
-
-
-
-
-
 
 
 
 def test_helper(m):
     global model
+    reset()
     log('Setup model..')
     model = Model( model_pars=m['model_pars'], data_pars=m['data_pars'], compute_pars= m['compute_pars'],
         global_pars=m['global_pars']
@@ -655,7 +605,6 @@ def test_helper(m):
     log('\n\n#################### Evaluating... #################### \n\n')
     eval(Xpred=None, data_pars=m['data_pars'], compute_pars=m['compute_pars'])
 
-    reset()
 
 
 
@@ -1214,8 +1163,10 @@ def test_rvae():
     model.fit()
     log("################################## Save Model ##################################")
     model.save()
-    
+
+
 if __name__ == "__main__":
-    # args = parser_arguments.getArgs(sys.argv[1:])
     import fire
-    fire.Fire(test2)
+    fire.Fire()
+
+

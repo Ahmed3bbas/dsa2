@@ -6,10 +6,41 @@ python model_bayesian_pyro.py      test
 
 
 """
-import os,  numpy as np, pandas as pd
+import os, sys,copy, pathlib, pprint, json, pandas as pd, numpy as np, scipy as sci, sklearn
+
+####################################################################################################
+try   : verbosity = int(json.load(open(os.path.dirname(os.path.abspath(__file__)) + "/../../config.json", mode='r'))['verbosity'])
+except Exception as e : verbosity = 2
+#raise Exception(f"{e}")
+
+def log(*s):
+    print(*s, flush=True)
+
+def log2(*s):
+    if verbosity >= 2 : print(*s, flush=True)
+
+def log3(*s):
+    if verbosity >= 3 : print(*s, flush=True)
+
+def os_makedirs(dir_or_file):
+    if os.path.isfile(dir_or_file) :os.makedirs(os.path.dirname(os.path.abspath(dir_or_file)), exist_ok=True)
+    else : os.makedirs(os.path.abspath(dir_or_file), exist_ok=True)
+
+####################################################################################################
+global model, session
+def init(*kw, **kwargs):
+    global model, session
+    model = Model(*kw, **kwargs)
+    session = None
+
+def reset():
+    global model, session
+    model, session = None, None
+
+
+########Custom Model ################################################################################
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
-
 import pyro
 import pyro.distributions as dist
 from pyro.infer import SVI, Trace_ELBO
@@ -17,12 +48,6 @@ from pyro.infer.autoguide import AutoDiagonalNormal
 from pyro.nn import PyroModule, PyroSample
 import torch
 from torch import nn
-
-####################################################################################################
-VERBOSE = False
-
-def log(*s):
-    print(*s, flush=True)
 
 
 ####################################################################################################
@@ -53,17 +78,8 @@ def model_class_loader(m_name='BayesianRegression', class_list:list=None):
   class_name = m_name.split("::")[-1]
   return class_list_dict.get(class_name)
 
+
 ####################################################################################################
-####################################################################################################
-global model, session
-
-
-def init(*kw, **kwargs):
-    global model, session
-    model = Model(*kw, **kwargs)
-    session = None
-
-
 class Model(object):
     def __init__(self, model_pars=None, data_pars=None, compute_pars=None):
         self.model_pars, self.compute_pars, self.data_pars = model_pars, compute_pars, data_pars
@@ -83,7 +99,7 @@ class Model(object):
             self.pred_summary = None  ### All MC summary
             self.history      = None
 
-            if VERBOSE: log(self.guide, self.model)
+            log(self.guide, self.model)
 
 
 def fit(data_pars=None, compute_pars=None, out_pars=None, **kw):
@@ -98,7 +114,7 @@ def fit(data_pars=None, compute_pars=None, out_pars=None, **kw):
     ytrain = torch.tensor(ytrain.values, dtype=torch.float)
     ytest  = torch.tensor(ytest.values, dtype=torch.float)
 
-    if VERBOSE: log(Xtrain, model.model)
+    log(Xtrain, model.model)
 
     ###############################################################
     compute_pars2 = compute_pars.get('compute_pars', {})
@@ -184,11 +200,6 @@ def predict(Xpred=None, data_pars={}, compute_pars=None, out_pars={}, **kw):
     if compute_pars.get("probability", False):
          ypred_proba = model.model.predict_proba(Xpred)
     return dd['y_mean'], ypred_proba
-
-
-def reset():
-    global model, session
-    model, session = None, None
 
 
 def save(path=None, info=None):

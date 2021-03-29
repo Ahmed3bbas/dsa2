@@ -107,63 +107,75 @@ jobs:
       continue-on-error: true
       run:  |
             cd source/models && ipython keras_widedeep.py  test
-            cd source/models && ipython keras_widedeep.py  test2
+            echo "keras_widedeep.py" >> file_check.txt
+      ## ipython keras_widedeep.py  test2
 
     - name: python keras_widedeep_dense.py  test
-      continue-on-error: true
+      # continue-on-error: true
       run:  |
             cd source/models && ipython keras_widedeep_dense.py  test
+            echo "keras_widedeep_dense.py" >> file_check.txt
 
 
     - name: python model_bayesian_numpyro.py test
       continue-on-error: true
-      run:  cd source/models && python model_bayesian_pyro.py test
+      run:  cd source/models && ipython model_bayesian_pyro.py test  && echo "model_bayesian_pyro.py" >> file_check.txt
 
 
     - name: python model_bayesian_pyro.py test
-      continue-on-error: true
-      run:  cd source/models && python model_bayesian_pyro.py test
+      # continue-on-error: true
+      run:  cd source/models && ipython model_bayesian_pyro.py test && echo "model_bayesian_pyro.py" >> file_check.txt
 
 
     - name: python model_gefs.py test
-      continue-on-error: true
-      run:  cd source/models && python model_gefs.py test
+      # continue-on-error: true
+      run:  cd source/models && ipython model_gefs.py test   && echo "model_gefs.py" >> file_check.txt
 
 
     - name: python model_sklearn.py test
       continue-on-error: true
-      run:  cd source/models && python model_sklearn.py test
+      run:  cd source/models && ipython model_sklearn.py test
 
 
     - name: python model_tseries.py test
       continue-on-error: true
-      run:  cd source/models && python model_tseries.py test
+      run:  cd source/models && ipython model_tseries.py test
 
 
     - name: python model_vaem.py test
       continue-on-error: true
-      run:  cd source/models && python model_gefs.py test
+      run:  cd source/models && ipython model_vaem.py test
 
 
     - name: python model_vaemdn.py test
-      continue-on-error: true
-      run:  cd source/models && python model_vaemdn.py test
+      # continue-on-error: true
+      run:  cd source/models && ipython model_vaemdn.py test2
 
 
-    - name: python torch_rvae.py test --nrows 1000
-      continue-on-error: true
+    - name: python torch_rvae.py test 
+      # continue-on-error: true
       run:  |
-            cd source/models && python torch_rvae.py test --nrows 1000
-            cd source/models && python torch_rvae.py test2 --nrows 1000
+            cd source/models && ipython torch_rvae.py test2 
+      ## ipython torch_rvae.py test
 
 
     - name: python torch_tabular.py test
+      # continue-on-error: true
+      run:  cd source/models && ipython torch_tabular.py test
+
+
+    - name: python optuna_lightgbm.py test
       continue-on-error: true
-      run:  cd source/models && python torch_tabular.py test
+      run:  cd source/models && ipython optuna_lightgbm.py test
 
 
+    - name: python model_sampler.py test
+      continue-on-error: true
+      run:  cd source/models && ipython model_sampler.py test
 
-
+    - name: python model_encoder.py test
+      continue-on-error: true
+      run:  cd source/models && ipython model_encoder.py.py test
 
 
 
