@@ -30,10 +30,6 @@ def log2(*s):
 def log3(*s):
     if verbosity >= 3 : print(*s, flush=True)
 
-def os_makedirs(dir_or_file):
-    if os.path.isfile(dir_or_file) :os.makedirs(os.path.dirname(os.path.abspath(dir_or_file)), exist_ok=True)
-    else : os.makedirs(os.path.abspath(dir_or_file), exist_ok=True)
-
 
 ####################################################################################################
 from util_feature import   load, save_list, load_function_uri, save
@@ -48,10 +44,6 @@ def save_features(df, name, path):
 def model_dict_load(model_dict, config_path, config_name, verbose=True):
     """ Load the model dict from the python config file.
        ### Issue wiht passing function durin pickle on disk
-    :param model_dict:
-    :param config_path:
-    :param config_name:
-    :param verbose:
     :return:
     """
     if model_dict is None :
@@ -223,7 +215,7 @@ def cols_validate(model_dict):
     """
     cols_input_type   = model_dict['data_pars']['cols_input_type']
     cols_prepro_in    = [   t['cols_family']  for t in model_dict['model_pars']['pre_process_pars']['pipe_list']  ]
-    cols_prepro_out   = [   t['cols_out']  for t in model_dict['model_pars']['pre_process_pars']['pipe_list']  ]
+    cols_prepro_out   = [   t['cols_out']     for t in model_dict['model_pars']['pre_process_pars']['pipe_list']  ]
     cols_model_in     = model_dict['data_pars']['cols_model_group']
     cols_model_type   = [ col_list  for k,col_list in  model_dict['data_pars']['cols_model_type'].items() ]
     cols_model_type   = sum(cols_model_type, [])
@@ -238,8 +230,6 @@ def cols_validate(model_dict):
        if  not t  in cols_prepro_out and not t in cols_input_type: raise Exception(f"Missing cols_model_type {t} in cols_input_type, prepro cols_out")
 
     log('#######  colgroup names are valid')
-
-
 
 
 def run_train(config_name, config_path="source/config_model.py", n_sample=5000,
@@ -303,7 +293,7 @@ def run_train(config_name, config_path="source/config_model.py", n_sample=5000,
 
 
     log("#### Train model: #############################################################")
-    log2(str(model_dict)[:1000])
+    log3(str(model_dict)[:1000])
     post_process_fun      = model_dict['model_pars']['post_process_fun']
     dfXy, dfXytest,stats  = train(model_dict, dfXy, cols, post_process_fun)
 
