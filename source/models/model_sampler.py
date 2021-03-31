@@ -80,7 +80,14 @@ from imblearn.under_sampling import NearMiss
 # CONSTANTS
 SDV_MODELS      = ['TVAE', 'CTGAN', 'PAR'] # The Synthetic Data Vault Models
 IMBLEARN_MODELS = ['SMOTE', 'SMOTEENN', 'SMOTETomek', 'NearMiss']
-
+MODEL_LIST      = {'TVAE'           : TVAE, 
+                    'CTGAN'         : CTGAN, 
+                    'PAR'           : PAR, 
+                    'SMOTE'         : SMOTE, 
+                    'SMOTEENN'      : SMOTEENN, 
+                    'SMOTETomek'    : SMOTETomek, 
+                    'NearMiss'      : NearMiss
+                    }
 
 ####################################################################################################
 class Model(object):
@@ -90,7 +97,10 @@ class Model(object):
         if model_pars is None:
             self.model = None
         else:
-            model_class = globals()[model_pars['model_class']]
+            try:
+                model_class = MODEL_LIST[model_pars['model_class']]
+            except Exception as e:
+                raise KeyError("Please add model_class to MODEL_LIST")
             self.model  = model_class(**model_pars['model_pars'])
             log2(model_class, self.model)
 
@@ -117,7 +127,7 @@ def eval(data_pars=None, compute_pars=None, out_pars=None, **kw):
     global model, session
     from sdv.evaluation import evaluate
 
-    data_pars['train'] = True
+    # data_pars['train'] = True
     Xval, yval         = get_dataset(data_pars, task_type="eval")
 
     if model.model_pars['model_class'] in IMBLEARN_MODELS:
@@ -221,9 +231,9 @@ def transform2(Xpred=None, data_pars={}, compute_pars={}, out_pars={}, **kw):
             else:
                 raise  Exception(f"IMBLEARN MODELS need to pass x, y to resample,you have to pass them as tuple => Xpred = (x, y)")
 
-       Xnew = model.model.fit_resample( Xpred_tuple, y, **compute_pars.get('compute_pars', {}) )
-       log3("generated data", Xnew)
-       return Xnew
+        Xnew = model.model.fit_resample( Xpred_tuple, y, **compute_pars.get('compute_pars', {}) )
+        log3("generated data", Xnew)
+        return Xnew
 
 
     if name in SDV_MODELS :
@@ -241,6 +251,8 @@ def transform2(Xpred=None, data_pars={}, compute_pars={}, out_pars={}, **kw):
 
     else :
        Xnew = model.model.transform( Xpred_tuple, **compute_pars.get('compute_pars', {}) )
+       log3("generated data", Xnew)
+        return Xnew
 
 
 
@@ -431,67 +443,47 @@ def test():
     log("test 5")
 
     #####################################################################
-    # log("test 2 --> CTGAN")
-    # model_pars = {'model_class': 'CTGAN',
-    #               'model_pars': {
-    #                  ## CTGAN
-    #                  'primary_key': colid,
-    #                  'epochs': 1,
-    #                  'batch_size' :100,
-    #                  'generator_dim' : (256, 256, 256),
-    #                  'discriminator_dim' : (256, 256, 256)
-    #             },
-    #             }
-    # compute_pars = { 
-    #     'compute_pars' : {}
-    #     }
-    # test_helper(model_pars, data_pars, compute_pars)
-
-
-    # log("test 3 --> TVAE")
-    # model_pars = {'model_class': 'TVAE',
-    #               'model_pars': { 
-    #                   ## TVAE
-    #                  'primary_key': colid,
-    #                  'epochs': 1,
-    #                  'batch_size' :100,
-    #             },
-    #             }
-    # compute_pars = { 
-    #     'compute_pars' : {}
-    #     }
-    # test_helper(model_pars, data_pars, compute_pars)
-
-    # log("test 4 --> PAR")
-    # entity_columns = [colid]
-    # context_columns = None
-    # sequence_index = None
-    # model_pars = {'model_class': 'PAR',
-    #               'model_pars': {
-    #                  ## PAR
-    #                  'epochs': 1,
-    #                  'entity_columns': entity_columns,
-    #                  'context_columns': context_columns,
-    #                  'sequence_index': sequence_index
-    #             },
-    #             }
-    # compute_pars = { 
-    #     'compute_pars' : {}
-    #     }
-    # test_helper(model_pars, data_pars, compute_pars)
-
-    log("test 6 --> SMOTE")
-    model_pars = {'model_class': 'SMOTE',
+    models = {
+        'CTGAN': {'model_class': 'CTGAN',
+                  'model_pars': {
+                     ## CTGAN
+                     'primary_key': colid,
+                     'epochs': 1,
+                     'batch_size' :100,
+                     'generator_dim' : (256, 256, 256),
+                     'discriminator_dim' : (256, 256, 256)
+                },
+                },
+        'TVAE': {'model_class': 'TVAE',
+                  'model_pars': { 
+                      ## TVAE
+                     'primary_key': colid,
+                     'epochs': 1,
+                     'batch_size' :100,
+                },
+                },
+        'PAR': {'model_class': 'PAR',
+                  'model_pars': {
+                     ## PAR
+                     'epochs': 1,
+                     'entity_columns': [colid],
+                     'context_columns': None,
+                     'sequence_index': None
+                },
+                },
+        'SMOTE': {'model_class': 'SMOTE',
                   'model_pars': {
                      ## SMOTE
                 },
                 }
-    compute_pars = { 
-        'compute_pars' : {}
-        }
-    test_helper(model_pars, data_pars, compute_pars)
 
+    }
 
+    counter = 1
+    for model_name, model_pars in models.items():
+        log(f"test {counter} --> {model_name}")
+        test_helper(model_pars, data_pars, compute_pars)
+        counter += 1
 
 
 
