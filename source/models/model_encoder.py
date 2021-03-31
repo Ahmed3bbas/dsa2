@@ -72,64 +72,6 @@ def log3(*s):
 
 
 ####################################################################################################
-def create_autoencoder_multimodal(input_shapes=[10],
-                                  hidden_dims=[128, 64, 8],
-                                  output_activations=['sigmoid', 'relu'],
-                                  loss = ['bernoulli_divergence', 'poisson_divergence'],
-                                  optimizer='adam'):
-    """
-    pip install mmae[keras]
-    from tensorflow.keras.datasets import mnist
-    (x_train, y_train), (x_validation, y_validation) = mnist.load_data()
-    x_train = x_train.astype('float32') / 255.0
-    y_train = y_train.astype('float32') / 255.0
-    x_validation = x_validation.astype('float32') / 255.0
-    y_validation = y_validation.astype('float32') / 255.0
-
-    data = [x_train, y_train]
-    validation_data = [x_validation, y_validation]
-
-
-
-    # Train model where input and output are the same
-    autoencoder.fit(data, epochs=100, batch_size=256,
-                    validation_data=validation_data)
-
-    #To obtain a latent representation of the training data:
-    latent_data = autoencoder.encode(data)
-
-    #To decode the latent representation:
-    reconstructed_data = autoencoder.decode(latent_data)
-
-    #Encoding and decoding can also be merged into the following single statement:
-    reconstructed_data = autoencoder.predict(data)
-
-    :return:
-    """
-    # Remove 'tensorflow.' from the next line if you use just Keras
-
-    from mmae.multimodal_autoencoder import MultimodalAutoencoder
-
-    # Set network parameters
-    #input_shapes = [x_train.shape[1:], (1,)]
-
-    # Number of units of each layer of encoder network
-    #hidden_dims = [128, 64, 8]
-
-    # Output activation functions for each modality
-    #output_activations = ['sigmoid', 'relu']
-
-    #optimizer = 'adam'
-    # Loss functions corresponding to a noise model for each modality
-    #loss = ['bernoulli_divergence', 'poisson_divergence']
-
-    # Construct autoencoder network
-    autoencoder = MultimodalAutoencoder(input_shapes, hidden_dims,
-                                        output_activations)
-    autoencoder.compile(optimizer, loss)
-    autoencoder.summary()
-
-    return autoencoder
 
 
 

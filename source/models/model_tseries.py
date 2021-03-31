@@ -5,28 +5,42 @@ Template for tseries type of model:
 
 
 """
-import os, sys,copy, pathlib, pprint, json, pandas as pd, numpy as np, scipy as sci, sklearn
+import os, pandas as pd, numpy as np, scipy as sci, sklearn
+from sklearn.linear_model import *
+from sklearn.svm import *
+from sklearn.ensemble import *
+from sklearn.tree import *
+from lightgbm import LGBMModel, LGBMRegressor, LGBMClassifier
+from sktime.forecasting.base import ForecastingHorizon
+from sktime.transformers.single_series.detrend import Deseasonalizer, Detrender
+from sktime.forecasting.trend import PolynomialTrendForecaster
+from sktime.forecasting.model_selection import (
+    temporal_train_test_split,
+)
+from sktime.utils.plotting import plot_series
+from sktime.forecasting.compose import (
+    TransformedTargetForecaster,
+    ReducedRegressionForecaster
+)
+
+try :
+   from supervised.automl import *
+except:
+    print('cannot import automl')
 
 ####################################################################################################
-try   : verbosity = int(json.load(open(os.path.dirname(os.path.abspath(__file__)) + "/../../config.json", mode='r'))['verbosity'])
-except Exception as e : verbosity = 2
-#raise Exception(f"{e}")
+VERBOSE = True
 
 def log(*s):
     print(*s, flush=True)
 
-def log2(*s):
-    if verbosity >= 2 : print(*s, flush=True)
 
 def log3(*s):
-    if verbosity >= 3 : print(*s, flush=True)
-
-def os_makedirs(dir_or_file):
-    if os.path.isfile(dir_or_file) :os.makedirs(os.path.dirname(os.path.abspath(dir_or_file)), exist_ok=True)
-    else : os.makedirs(os.path.abspath(dir_or_file), exist_ok=True)
+    print(*s, flush=True)
 
 ####################################################################################################
 global model, session
+
 def init(*kw, **kwargs):
     global model, session
     model = Model(*kw, **kwargs)
@@ -36,19 +50,9 @@ def reset():
     global model, session
     model, session = None, None
 
-
-########Custom Model ################################################################################
-from sklearn.linear_model import *
-from sklearn.tree import *
-from lightgbm import LGBMModel, LGBMRegressor, LGBMClassifier
-
-from sktime import forecasting
-
+####################################################################################################
 class myModel(object):
     pass
-
-
-
 
 
 
@@ -63,7 +67,7 @@ class Model(object):
         else:
             model_class = globals()[model_pars['model_class']]
             self.model = model_class(**model_pars['model_pars'])
-            log(model_class, self.model)
+            if VERBOSE: log(model_class, self.model)
 
 
 def fit(data_pars=None, compute_pars=None, out_pars=None, **kw):
@@ -72,36 +76,13 @@ def fit(data_pars=None, compute_pars=None, out_pars=None, **kw):
     global model, session
     session = None  # Session type for compute
     Xtrain, ytrain, Xtest, ytest = get_dataset(data_pars, task_type="train")
-    log(Xtrain.shape, model.model)
+    if VERBOSE: log(Xtrain.shape, model.model)
 
     if "LGBM" in model.model_pars['model_class']:
         model.model.fit(Xtrain, ytrain, eval_set=[(Xtest, ytest)], **compute_pars.get("compute_pars", {}))
     else:
         model.model.fit(Xtrain, ytrain, **compute_pars.get("compute_pars", {}))
 
-
-def eval(data_pars=None, compute_pars=None, out_pars=None, **kw):
-    """
-       Return metrics of the model when fitted.
-    """
-    global model, session
-    data_pars['train'] = True
-    Xval, yval = get_dataset(data_pars, task_type="eval")
-    ypred = predict(Xval, data_pars, compute_pars, out_pars)
-
-    # log(data_pars)
-    mpars = compute_pars.get("metrics_pars", {'metric_name': 'mae'})
-
-    scorer = {
-        "rmse": sklearn.metrics.mean_squared_error,
-        "mae": sklearn.metrics.mean_absolute_error
-    }[mpars['metric_name']]
-
-    mpars2 = mpars.get("metrics_pars", {})  ##Specific to score
-    score_val = scorer(yval, ypred, **mpars2)
-    ddict = [{"metric_val": score_val, 'metric_name': mpars['metric_name']}]
-
-    return ddict
 
 
 def predict(Xpred=None, data_pars={}, compute_pars={}, out_pars={}, **kw):
@@ -111,12 +92,11 @@ def predict(Xpred=None, data_pars={}, compute_pars={}, out_pars={}, **kw):
         data_pars['train'] = False
         Xpred = get_dataset(data_pars, task_type="predict")
 
-    ypred = model.model.predict(Xpred)
-    #ypred = post_process_fun(ypred)
-    
-    ypred_proba = None  ### No proba    
-    if compute_pars.get("probability", False):
-         ypred_proba = model.model.predict_proba(Xpred) 
+    Xpred_fh = ForecastingHorizon(Xpred.index, is_relative=False)
+
+    ypred = model.model.predict(Xpred_fh)
+
+    ypred_proba = None  ### No proba
     return ypred, ypred_proba
 
 
@@ -158,9 +138,10 @@ def load_info(path=""):
 
 
 ####################################################################################################
+############ Do not change #########################################################################
 def get_dataset(data_pars=None, task_type="train", **kw):
     """
-      "ram"  : 
+      "ram"  :
       "file" :
     """
     # log(data_pars)
@@ -190,19 +171,94 @@ def get_dataset(data_pars=None, task_type="train", **kw):
     raise Exception(f' Requires  Xtrain", "Xtest", "ytrain", "ytest" ')
 
 
-def test_dataset_tseries():
+
+
+####################################################################################################################
+def test_dataset_tseries()
    pass
 
 
+def LighGBM_forecaster(lightgbm_pars= {'objective':'quantile', 'alpha': 0.5},
+                       forecaster_pars = {'window_length': 4, 'strategy' : "recursive" }):
+    """
+    """
+    #Initialize Light GBM Regressor
+    regressor = lgb.LGBMRegressor(**lightgbm_params)
 
-def test(nrows=1000):
+    #1.Separate the Seasonal Component.
+    #2.Fit a forecaster for the trend.
+    #3.Fit a Autoregressor to the resdiual(autoregressing on four historic values).
+    forecaster = ReducedRegressionForecaster(
+                    regressor=regressor, **forecaster_pars  #hyper-paramter to set recursive strategy
+                    )
+    return forecaster
+
+
+def test0(nrows=1000):
     """
         nrows : take first nrows from dataset
     """
     global model, session
-    df, colnum, colcat, coly = test_dataset_tseries()
+    df, coly, coldate, colcat = test_dataset_tseries()
 
-    #### Matching Big dict  ##################################################    
+    #### Matching Big dict  ##################################################
+    df = df.set_index(coldate)  #### Date as
+    X  = df.drop(coly)
+    y  = df[coly]
+
+    # Split the df into train/test subsets
+    X_train_full, X_test, y_train_full, y_test = train_test_split(X, y, test_size=0.05, random_state=2021, stratify=y)
+    X_train, X_valid, y_train, y_valid         = train_test_split(X_train_full, y_train_full, random_state=2021, stratify=y_train_full)
+
+    sktime_y_train，sktime_y_test = temporal_train_test_split(y, test_size=0.2)
+
+    #A 10 percent and 90 percent prediction interval(0.1,0.9 respectively).
+    quantiles = [.1, .5, .9] #Hyper-parameter "alpha" in Light GBM
+    #Capture forecasts for 10th/median/90th quantile, respectively.
+    forecasts = []
+
+    #Iterate for each quantile.
+    for alpha in quantiles:
+        forecaster = LighGBM_forecaster(lightgbm_pars= {'objective':'quantile', 'alpha': 0.5} )
+
+        #Fit on Training data.
+        forecaster.fit(y_train)
+
+        #Forecast the values.
+        #Initialize ForecastingHorizon class to specify the horizon of forecast
+        fh = ForecastingHorizon(y_test.index, is_relative=False)
+        y_pred = forecaster.predict(fh)
+
+
+        #List of forecasts made for each quantile.
+        y_pred.index.name="date"
+        y_pred.name=f"predicted_sales_q_{alpha}"
+        forecasts.append(y_pred)
+
+    #Append the actual data for plotting.
+    store1_agg_monthly.index.name = "date"
+    store1_agg_monthly.name = "original"
+    forecasts.append(store1_agg_monthly)
+
+
+    log('Predict data..')
+    log(f'Top 5 y_pred: {forecasts[:5]}')
+
+
+
+
+
+
+
+
+def test2(nrows=1000):
+    """
+        nrows : take first nrows from dataset
+    """
+    global model, session
+    df, colnum, colcat, coly = test_dataset()
+
+    #### Matching Big dict  ##################################################
     X = df
     y = df[coly].astype('uint8')
     log('y', np.sum(y[y==1]) )
@@ -210,6 +266,63 @@ def test(nrows=1000):
     # Split the df into train/test subsets
     X_train_full, X_test, y_train_full, y_test = train_test_split(X, y, test_size=0.05, random_state=2021, stratify=y)
     X_train, X_valid, y_train, y_valid         = train_test_split(X_train_full, y_train_full, random_state=2021, stratify=y_train_full)
+
+    sktime_y_train，sktime_y_test = temporal_train_test_split(y, test_size=0.2)
+
+    def get_transformed_target_forecaster(alpha,params):
+
+        #Initialize Light GBM Regressor
+
+        regressor = lgb.LGBMRegressor(alpha = alpha,**params)
+    #-----------------------Forecaster Pipeline-----------------
+
+        #1.Separate the Seasonal Component.
+        #2.Fit a forecaster for the trend.
+        #3.Fit a Autoregressor to the resdiual(autoregressing on four historic values).
+
+        forecaster = ReducedRegressionForecaster(
+                        regressor=regressor, window_length=4, strategy="recursive" #hyper-paramter to set recursive strategy
+                        )
+
+        return forecaster
+
+    params = {
+        'objective':'quantile'
+    }
+    #A 10 percent and 90 percent prediction interval(0.1,0.9 respectively).
+    quantiles = [.1, .5, .9] #Hyper-parameter "alpha" in Light GBM
+    #Capture forecasts for 10th/median/90th quantile, respectively.
+    forecasts = []
+    #Iterate for each quantile.
+    for alpha in quantiles:
+
+        forecaster = get_transformed_target_forecaster(alpha,params)
+
+        #Initialize ForecastingHorizon class to specify the horizon of forecast
+        fh = ForecastingHorizon(y_test.index, is_relative=False)
+
+        #Fit on Training data.
+        forecaster.fit(y_train)
+
+        #Forecast the values.
+        y_pred = forecaster.predict(fh)
+
+        #List of forecasts made for each quantile.
+        y_pred.index.name="date"
+        y_pred.name=f"predicted_sales_q_{alpha}"
+        forecasts.append(y_pred)
+
+    #Append the actual data for plotting.
+    store1_agg_monthly.index.name = "date"
+    store1_agg_monthly.name = "original"
+    forecasts.append(store1_agg_monthly)
+
+
+    log('Predict data..')
+    log(f'Top 5 y_pred: {forecasts[:5]}')
+    reset()
+
+
     num_classes = len(set(y_train_full[coly].values.ravel()))
     log(X_train)
 
@@ -227,13 +340,13 @@ def test(nrows=1000):
         ### LightGBM API model   #######################################
         # Specify the ModelConfig for pytorch_tabular
         'model_class':  "torch_tabular.py::CategoryEmbeddingModelConfig"
-        
+
         # Type of target prediction, evaluation metrics
-        ,'model_pars' : { 
+        ,'model_pars' : {
                         # 'task': "classification",
                         # 'metrics' : ["f1","accuracy"],
                         # 'metrics_params' : [{"num_classes":num_classes},{}]
-                        }  
+                        }
 
         , 'post_process_fun' : post_process_fun   ### After prediction  ##########################################
         , 'pre_process_pars' : {'y_norm_fun' :  pre_process_fun ,  ### Before training  ##########################
@@ -260,20 +373,20 @@ def test(nrows=1000):
                                         'colcat' : colcat,
                                         'coly' : coly
                             }
-        ###################################################  
+        ###################################################
         ,'train': {'Xtrain': X_train, 'ytrain': y_train,
                    'Xtest': X_valid,  'ytest':  y_valid},
                 'eval': {'X': X_valid,  'y': y_valid},
-                'predict': {}
+                'predict': {'X': X_valid}
 
         ### Filter data rows   ##################################################################
         ,'filter_pars': { 'ymax' : 2 ,'ymin' : -1 },
 
-        
+
         ### Added continuous & sparse features groups ###
         'cols_model_type2': {
             'colcontinuous':   colnum ,
-            'colsparse' : colcat, 
+            'colsparse' : colcat,
         },
         }
     }
@@ -283,11 +396,11 @@ def test(nrows=1000):
 
     """
     ll = [
-        ('model_tseries.py::LightGBMregressor', 
+        ('model_tseries.py::LightGBMregressor',
             {   'task': "classification",
                 'metrics' : ["f1","accuracy"],
                 'metrics_params' : [{"num_classes":num_classes},{}]
-            }  
+            }
         ),
 
     ]
@@ -314,14 +427,8 @@ def test(nrows=1000):
         reset()
 
 
+
 if __name__ == "__main__":
     import fire
     fire.Fire()
     # test()
-
-
-
-
-
-
-

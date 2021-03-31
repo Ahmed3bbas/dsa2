@@ -415,6 +415,62 @@ def test(n_sample          = 1000):
 
 
 
+def test2():
+    """
+        from pyod.models.abod  import *
+    from pyod.models.auto_encoder import *
+    from pyod.models.cblof import *
+    from pyod.models.cof import *
+    from pyod.models.combination import *
+    from pyod.models.copod import *
+    from pyod.models.feature_bagging import *
+    from pyod.models.hbos import *
+    from pyod.models.iforest import *
+    from pyod.models.knn import *
+    from pyod.models.lmdd import *
+    from pyod.models.loda import *
+    from pyod.models.lof import *
+    from pyod.models.loci import *
+    from pyod.models.lscp import *
+    from pyod.models.mad import *
+    from pyod.models.mcd import *
+    from pyod.models.mo_gaal import *
+    from pyod.models.ocsvm import *
+    from pyod.models.pca import *
+    from pyod.models.sod import *
+    from pyod.models.so_gaal import *
+    from pyod.models.sos import *
+    from pyod.models.vae import *
+    from pyod.models.xgbod import *
+
+    https://pyod.readthedocs.io/en/latest/pyod.html
+
+    :return:
+    """
+    global model
+    try:
+        from pmlb import fetch_data, classification_dataset_names
+    except:
+        log("Installing pmlb...")
+        os.system("pip install pmlb")
+        log("Pmlb Installed")
+        from pmlb import fetch_data, classification_dataset_names
+
+
+    ####
+    m = template_dict()
+    ll= [ 'PCA', 'SO_GAAL', 'VAE', 'HBOS' ]
+
+    for dataset in classification_dataset_names :
+      for modeli in  ll:
+         m['model_class'] = modeli
+
+
+
+
+
+
+
 
 if __name__ == "__main__":
     import fire

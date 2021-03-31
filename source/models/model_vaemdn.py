@@ -183,7 +183,8 @@ def VAEMDN(model_pars):
 
 
 
-def AUTOENCODER_BASIC(loss_type="CosineSimilarity"):
+def AUTOENCODER_BASIC(X_input_dim,loss_type="CosineSimilarity", lr=0.01, epsilon=1e-3, decay=1e-4,
+                      optimizer='adam', encodingdim = 50, dim_list="50,25,10" ):
     import tensorflow as tf
     import keras.backend as K
     print(tf.__version__)
@@ -192,21 +193,32 @@ def AUTOENCODER_BASIC(loss_type="CosineSimilarity"):
       intersection = K.sum(K.abs(y_true * y_pred), axis=-1)
       return (2. * intersection + smooth) / (K.sum(K.square(y_true),-1) + K.sum(K.square(y_pred),-1) + smooth)
 
+    dim_list = dim_list.split(",")
 
-    encodingdim = 50 
+
+    # encodingdim = 50
     # input =  tf.keras.layers.Input(X.shape[1],sparse=True) # use this if tensor is sparse
-    input   = tf.keras.layers.Input(X_input_dim)
-    encoded = tf.keras.layers.Dense(500, activation='relu')(input)
-    encoded = tf.keras.layers.Dense(250, activation='relu')(encoded)
-    encoded = tf.keras.layers.Dense(encodingdim, activation='relu')(encoded)
+    inputs  = tf.keras.layers.Input(X_input_dim)
+    encoded = tf.keras.layers.Dense( dim_list[0], activation='relu')(inputs)
+    encoded = tf.keras.layers.Dense( dim_list[1], activation='relu')(encoded)
+    encoded = tf.keras.layers.Dense( dim_list[2], activation='relu')(encoded)
 
-    decoded = tf.keras.layers.Dense(250, activation='relu')(encoded)
-    decoded = tf.keras.layers.Dense(500, activation='relu')(decoded)
+
+    decoded_input = tf.keras.layers.Input( dim_list[2] )
+    decoded = tf.keras.layers.Dense(dim_list[1], activation='relu')(decoded_input)
+    decoded = tf.keras.layers.Dense(dim_list[0], activation='relu')(decoded)
     decoded = tf.keras.layers.Dense(X_input_dim, activation='relu')(decoded)
+    
+    encoder = tf.keras.models.Model(inputs=inputs,outputs=encoded,name='encoder')
+    encoder.compile(optimizer=optimizer)
 
-    autoencoder = tf.keras.Model(input, decoded)
+    decoder = tf.keras.models.Model(inputs=decoded_input,outputs=decoded,name='decoder')
+    decoder.compile(optimizer=optimizer)
 
-    opt = tf.keras.optimizers.Adagrad(lr=0.01, epsilon=1e-3, decay=1e-4)
+    outputs     = decoder(encoder(inputs))
+    autoencoder = tf.keras.models.Model(inputs,outputs)
+    opt         = tf.keras.optimizers.Adagrad(lr=lr, epsilon=epsilon, decay=decay)
+
 
     if loss_type == "cosinesimilarity" :
        autoencoder.compile(optimizer=opt, loss=tf.keras.losses.CosineSimilarity(reduction="auto")) # cosine loss
@@ -218,9 +230,66 @@ def AUTOENCODER_BASIC(loss_type="CosineSimilarity"):
        autoencoder.compile(optimizer=opt, loss= tf.keras.losses.categorical_crossentropy) # this is same algorith explained as "CustomLoss" topic in pytorch version.
 
     log2(autoencoder.summary())
+    return autoencoder,encoder,decoder
+
+
+def AUTOENCODER_MULTIMODAL(input_shapes=[10],
+                                  hidden_dims=[128, 64, 8],
+                                  output_activations=['sigmoid', 'relu'],
+                                  loss = ['bernoulli_divergence', 'poisson_divergence'],
+                                  optimizer='adam'):
+    """
+    pip install mmae[keras]
+    from tensorflow.keras.datasets import mnist
+    (x_train, y_train), (x_validation, y_validation) = mnist.load_data()
+    x_train = x_train.astype('float32') / 255.0
+    y_train = y_train.astype('float32') / 255.0
+    x_validation = x_validation.astype('float32') / 255.0
+    y_validation = y_validation.astype('float32') / 255.0
+
+    data = [x_train, y_train]
+    validation_data = [x_validation, y_validation]
+
+
+
+    # Train model where input and output are the same
+    autoencoder.fit(data, epochs=100, batch_size=256,
+                    validation_data=validation_data)
+
+    #To obtain a latent representation of the training data:
+    latent_data = autoencoder.encode(data)
+
+    #To decode the latent representation:
+    reconstructed_data = autoencoder.decode(latent_data)
+
+    #Encoding and decoding can also be merged into the following single statement:
+    reconstructed_data = autoencoder.predict(data)
+
+    :return:
+    """
+    # Remove 'tensorflow.' from the next line if you use just Keras
+
+    from mmae.multimodal_autoencoder import MultimodalAutoencoder
+
+    # Set network parameters
+    #input_shapes = [x_train.shape[1:], (1,)]
+
+    # Number of units of each layer of encoder network
+    #hidden_dims = [128, 64, 8]
+
+    # Output activation functions for each modality
+    #output_activations = ['sigmoid', 'relu']
+
+    #optimizer = 'adam'
+    # Loss functions corresponding to a noise model for each modality
+    #loss = ['bernoulli_divergence', 'poisson_divergence']
+
+    # Construct autoencoder network
+    autoencoder = MultimodalAutoencoder(input_shapes, hidden_dims,
+                                        output_activations)
+    autoencoder.compile(optimizer, loss)
+    autoencoder.summary()
     return autoencoder
-
-
 
 
 
@@ -252,16 +321,19 @@ class Model(object):
 
         ### Dynamic Dimension : data_pars  ---> model_pars dimension  ###############
         # mdict['original_dim'] = np.uint32( data_pars['signal_dimension']*(data_pars['signal_dimension']-1)/2)
-
+        dim = model_pars['model_pars']['original_dim']
 
         #### Model setup #############################################################
         self.model_pars['model_pars'] = mdict
-        self.model, self.encoder, self.decoder = VAEMDN( self.model_pars['model_pars'])
+        if 'VAEMDN' in model_class:
+            self.model, self.encoder, self.decoder = VAEMDN( self.model_pars['model_pars'])
+        else:
+            self.model,self.encoder, self.decoder = AUTOENCODER_BASIC(dim)
         log2(self.model_pars, self.model)
         # self.model.summary()
 
 
-def fit(data_pars=None, compute_pars=None, out_pars=None, **kw):
+def fit(data_pars=None, compute_pars=None, out_pars=None,model_class='VAEMDN', **kw):
     """
     """
     global model, session
@@ -282,15 +354,20 @@ def fit(data_pars=None, compute_pars=None, out_pars=None, **kw):
     ### Fake label
     Xtest_dummy  = np.ones((Xtest_tuple.shape[0], 1))
     Xtrain_dummy = np.ones((Xtrain_tuple.shape[0], 1))
+    if 'VAEMDN' in model_class:
+        hist = model.model.fit([Xtrain_tuple,ytrain],
+                                validation_data=[Xtest_tuple,ytest],
+                                **cpars)
+    else:
 
-    hist = model.model.fit([Xtrain_tuple, ytrain],
-                            validation_data=[Xtest_tuple, ytest],
-                            **cpars)
+        hist = model.model.fit(Xtrain_tuple,Xtrain_tuple,
+                                validation_data=[Xtest_tuple],
+                                **cpars)
     model.history = hist
 
 
 
-def encode(Xpred=None, data_pars=None, compute_pars={}, out_pars={}, **kw):
+def encode(Xpred=None, data_pars=None, compute_pars={}, out_pars={},model_class='VAEMDN', **kw):
     global model, session
     if Xpred is None:
         Xpred_tuple = get_dataset(data_pars, task_type="predict")
@@ -300,23 +377,41 @@ def encode(Xpred=None, data_pars=None, compute_pars={}, out_pars={}, **kw):
 
     #log2(Xpred_tuple)
     Xdummy      = np.ones((Xpred_tuple.shape[0], 1))
-    Xnew_encode = model.encoder.predict([Xpred_tuple, Xdummy ] )
-
+    #log(Xpred_tuple)
+    
     #### Saving on disk
-    path_save = compute_pars.get('compute_extra', {}).get('path_encoding', None)
-    if path_save is not None :
-        os_makedirs(path_save)
-        filename    = {0:'encoded_mean.parquet', 1:'encoded_logvar.parquet', 2:'encoded_mu.parquet'}
-        for j,encodings in enumerate(Xnew_encode[:3]):
+    if model_class == 'VAEMDN':
+        Xnew_encode = model.encoder.predict([Xpred_tuple,Xdummy])
+        path_save = compute_pars.get('compute_extra', {}).get('path_encoding', None)
+        if path_save is not None :
+            os_makedirs(path_save)
+            filename    = {0:'encoded_mean.parquet', 1:'encoded_logvar.parquet', 2:'encoded_mu.parquet'}
+            for j,encodings in enumerate(Xnew_encode[:3]):
+                parquetDic = {}
+                for i in range(encodings.shape[1]):
+                    name             = f'col_{i+1}'
+                    parquetDic[name] = encodings[:,i]
+                log2(f'Encoder Columns shape: {encodings.shape}')
+                ndarray_table = pa.table(parquetDic)
+                pq.write_table(ndarray_table,   path_save  + "/" + filename[j] )
+                log(f'{path_save}/{filename[j]} created')
+    
+    else:
+        Xnew_encode = model.encoder.predict(Xpred_tuple)
+        log(Xnew_encode.shape)
+        path_save = compute_pars.get('compute_extra', {}).get('path_encoding', None)
+        if path_save is not None :
+            os_makedirs(path_save)
+            filename    = 'my_encode_basic_AE.parquet'
+                
             parquetDic = {}
-            for i in range(encodings.shape[1]):
+            for i in range(Xnew_encode.shape[1]):
                 name             = f'col_{i+1}'
-                parquetDic[name] = encodings[:,i]
-            log2(f'Encoder Columns shape: {encodings.shape}')
+                parquetDic[name] = Xnew_encode[:,i]
+            log2(f'Encoder Columns shape: {Xnew_encode.shape}')
             ndarray_table = pa.table(parquetDic)
-            pq.write_table(ndarray_table,   path_save  + "/" + filename[j] )
-            log(f'{path_save}/{filename[j]} created')
-        
+            pq.write_table(ndarray_table,   path_save  + "/" + filename)
+            log(f'{path_save}/{filename} created')
     return Xnew_encode
 
 
@@ -331,9 +426,10 @@ def decode(Xpred=None, data_pars=None, compute_pars={}, out_pars={}, index = 0, 
 
     #log2(Xpred_tuple)
     #Xdummy      = np.ones((Xpred_tuple.shape[0], 1))
-    decoded_array = model.decoder.predict(Xpred )
 
-    #### Saving on disk
+    log(Xpred.shape)
+    decoded_array = model.decoder.predict(Xpred )
+        #### Saving on disk
     path_save = compute_pars.get('compute_extra', {}).get('path_encoding', None)
     if path_save is not None :
         parquetDic = {}
@@ -343,15 +439,16 @@ def decode(Xpred=None, data_pars=None, compute_pars={}, out_pars={}, index = 0, 
             parquetDic[name] = decoded_array[:,i]
         log2(f'Decoder Columns Shape {decoded_array.shape}')
 
-        filename = {0:'decoded_mean.parquet', 1:'decoded_logvar.parquet', 2:'decoded_mu.parquet'}
+        filename = {0:'decoded.parquet', 1:'decoded_logvar.parquet', 2:'decoded_mu.parquet'}
         log2(decoded_array)
         ndarray_table = pa.table(parquetDic)
-        pq.write_table(ndarray_table,filename[index])
+        pq.write_table(ndarray_table,path_save  + "/" + filename[index])
         log(f'{filename[index]} created')
+
     return decoded_array
 
 
-def predict(Xpred=None, data_pars=None, compute_pars={}, out_pars={}, **kw):
+def predict(Xpred=None, data_pars=None, compute_pars={}, out_pars={},model_class='VAEMDN', **kw):
     global model, session
     if Xpred is None:
         Xpred_tuple = get_dataset(data_pars, task_type="predict")
@@ -362,7 +459,10 @@ def predict(Xpred=None, data_pars=None, compute_pars={}, out_pars={}, **kw):
 
     #log2(Xpred_tuple)
     Xdummy = np.ones((Xpred_tuple.shape[0], 1))
-    Xnew   = model.model.predict([Xpred_tuple, Xdummy ] )
+    if 'VAEMDN' in model_class:
+        Xnew   = model.model.predict([Xpred_tuple,Xdummy])
+    else:
+        Xnew   = model.model.predict(Xpred_tuple )
     return Xnew
 
 
@@ -471,14 +571,17 @@ def save(path=None, info=None):
     pickle.dump(info, open(f"{path}/info.pkl", mode='wb'))  #
 
 
-def load_model(path=""):
+def load_model(path="",model_class='VAEMDN'):
     global model, session
     import dill as pickle
 
     model0      = pickle.load(open(f"{path}/model.pkl", mode='rb'))
 
     model = Model()  # Empty model
-    model.model, model.encoder, model.decoder        = VAEMDN( model0.model_pars['model_pars'])
+    if 'VAEMDN' in model_class:
+        model.model, model.encoder, model.decoder        = VAEMDN( model0.model_pars['model_pars'])
+    else:
+        model.model, model.encoder, model.decoder        = AUTOENCODER_BASIC( model0.model_pars['model_pars']['original_dim'])
     model.model_pars   = model0.model_pars
     model.compute_pars = model0.compute_pars
 
@@ -762,7 +865,8 @@ def test3(n_sample          = 1000):
     def pre_process_fun(y):  return int(y)
 
     m = {'model_pars': {
-        'model_class':  "model_vaem.py::VAEMDN"
+        'model_class':  "model_vaem.py::Basic_AE"
+
         ,'model_pars' : {
             'original_dim':       len( colcat + colnum),
             'class_num':             2,
@@ -819,9 +923,10 @@ def test3(n_sample          = 1000):
         ,'task_type' : 'train', 'data_type': 'ram'
         }
     }
-
+    
     ###  Tester #########################################################
     test_helper(m['model_pars'], m['data_pars'], m['compute_pars'])
+    
 
 
 
@@ -829,6 +934,63 @@ def test_helper(model_pars, data_pars, compute_pars):
     global model, session
     init()
     root  = "ztmp/"
+    model = Model(model_pars=model_pars, data_pars=data_pars, compute_pars=compute_pars)
+    model_class = model_pars['model_class']
+
+    log('Training the model..')
+    fit(data_pars=data_pars, compute_pars=compute_pars, out_pars=None,model_class=model_class)
+
+
+    log('Predict data..')
+    Xnew = predict(data_pars=data_pars,  compute_pars=compute_pars,model_class=model_class)
+
+    
+    if 'VAEMDN' in model_class:
+        log('Encode data..')
+        encoded = encode(data_pars=data_pars,  compute_pars=compute_pars,model_class='VAEMDN')
+        encoded = encoded[:3]
+        print('Encoded X (Batch 1): \n', encoded)
+
+        #log(encoded)
+        #There are different batches of Dataframe we have to perform on each batches
+
+        log('Deccode data..')
+        decoded_array = []
+        for num,Xpred in enumerate(encoded):
+            log(f'Shape of Decoded array: {Xpred.shape}')
+            decoded = decode(Xpred = Xpred,data_pars=data_pars,index=num , compute_pars=compute_pars)
+            decoded_array.append(decoded)
+        print('Decoded X: \n')
+        #log(decoded_array[0])
+
+    else:
+        log('Encode data..')
+        encoded = encode(data_pars=data_pars,  compute_pars=compute_pars,model_class='BasicAE')
+        print('Encoded X (Batch 1): \n', encoded)
+
+        #log(encoded)
+        #There are different batches of Dataframe we have to perform on each batches
+
+        log('Deccode data..')
+        decoded = decode(Xpred = encoded,data_pars=data_pars, compute_pars=compute_pars)
+        print('Decoded X: \n')
+        log(decoded)
+
+    log('Saving model..')
+    log( model.model.summary() )
+    save(path= root + '/model_dir/')
+
+    log('Load model..')
+    model, session = load_model(path= root + "/model_dir/",model_class=model_class)
+
+    log('Model architecture:')
+    log(model.model.summary())
+
+def test_autoencoder(model_pars, data_pars, compute_pars):
+    global model, session
+    init()
+    root  = "ztmp/"
+    dim = model_pars['model_pars']['original_dim']
     model = Model(model_pars=model_pars, data_pars=data_pars, compute_pars=compute_pars)
 
     log('Training the model..')
@@ -841,32 +1003,27 @@ def test_helper(model_pars, data_pars, compute_pars):
 
     log('Encode data..')
     encoded = encode(data_pars=data_pars,  compute_pars=compute_pars)
-    encoded = encoded[:3]
     print('Encoded X (Batch 1): \n', encoded)
 
     #log(encoded)
     #There are different batches of Dataframe we have to perform on each batches
 
     log('Deccode data..')
-    decoded_array = []
-    for num,Xpred in enumerate(encoded):
-        log(f'Shape of Decoded array: {Xpred.shape}')
-        decoded = decode(Xpred = Xpred,data_pars=data_pars,index=num , compute_pars=compute_pars)
-        decoded_array.append(decoded)
+    decoded = decode(Xpred = encoded,data_pars=data_pars, compute_pars=compute_pars)
     print('Decoded X: \n')
-    #log(decoded_array[0])
+    log(decoded)
 
 
     log('Saving model..')
     log( model.model.summary() )
     save(path= root + '/model_dir/')
 
-    log('Load model..')
+    '''log('Load model..')
     model, session = load_model(path= root + "/model_dir/")
 
     log('Model architecture:')
     log(model.model.summary())
-
+    '''
 
 
 if __name__ == "__main__":

@@ -103,6 +103,11 @@ jobs:
       run:  cd source/models && ipython torch_tabular.py test3
 
 
+    - name: python optuna_lightgbm.py test
+      continue-on-error: true
+      run:  cd source/models && ipython optuna_lightgbm.py benchmark
+
+
 
     - name: python keras_widedeep.py  test
       continue-on-error: true
@@ -158,9 +163,6 @@ jobs:
       ## ipython torch_rvae.py test
 
 
-    - name: python optuna_lightgbm.py test
-      continue-on-error: true
-      run:  cd source/models && ipython optuna_lightgbm.py test3
 
 
     - name: python model_sampler.py test

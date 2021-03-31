@@ -191,6 +191,60 @@ def transform(Xpred=None, data_pars={}, compute_pars={}, out_pars={}, **kw):
 
 
 
+
+def transform2(Xpred=None, data_pars={}, compute_pars={}, out_pars={}, **kw):
+    """ Geenrate Xtrain  ----> Xtrain_new
+    :param Xpred:
+        Xpred ==> None            if you want to get generated samples by by SDV models
+              ==> tuple of (x, y) if you want to resample dataset with IMBLEARN models
+              ==> dataframe       if you want to transorm by sklearn models like TruncatedSVD
+    :param data_pars:
+    :param compute_pars:
+    :param out_pars:
+    :param kw:
+    :return:
+    """
+    global model, session
+    name = model.model_pars['model_class']
+
+    #######
+    if name in IMBLEARN_MODELS:
+        if Xpred is None:
+            Xpred_tuple, y = get_dataset(data_pars, task_type="eval")
+        else :
+            cols_type         = data_pars['cols_model_type2']
+            cols_ref_formodel = cols_type  ### Always match with feeded cols_type
+            split             = kw.get("split", False)
+            if isinstance(Xpred, tuple) and len(Xpred) == 2:
+                x, y = Xpred
+                Xpred_tuple = get_dataset_tuple(x, cols_type, cols_ref_formodel, split)
+            else:
+                raise  Exception(f"IMBLEARN MODELS need to pass x, y to resample,you have to pass them as tuple => Xpred = (x, y)")
+
+       Xnew = model.model.fit_resample( Xpred_tuple, y, **compute_pars.get('compute_pars', {}) )
+       log3("generated data", Xnew)
+       return Xnew
+
+
+    if name in SDV_MODELS :
+        if Xpred is None:
+            Xpred_tuple = get_dataset(data_pars, task_type="predict")
+
+        cols_type         = data_pars['cols_model_type2']
+        cols_ref_formodel = cols_type  ### Always match with feeded cols_type
+        split             = kw.get("split", False)
+        Xpred_tuple       = get_dataset_tuple(Xpred, cols_type, cols_ref_formodel, split)
+        Xnew = model.model.sample(compute_pars.get('n_sample_generation', 100) )
+        log3("generated data", Xnew)
+        return Xnew
+
+
+    else :
+       Xnew = model.model.transform( Xpred_tuple, **compute_pars.get('compute_pars', {}) )
+
+
+
+
 def predict(Xpred=None, data_pars={}, compute_pars={}, out_pars={}, **kw):
     global model, session
     pass
