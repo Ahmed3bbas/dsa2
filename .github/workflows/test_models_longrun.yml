@@ -93,14 +93,14 @@ jobs:
     #- name: run_models
     #  run: chmod -R 777 . && ztest/run_models.sh   # 2>&1 | tee   /home/runner/work/mlmodels/mlmodels_store/log_import/log_optim.py
 
-    - name: python model_vaemdn.py test
+    - name: python model_vaemdn.py
       # continue-on-error: true
-      run:  cd source/models && ipython model_vaemdn.py test3
+      run:  cd source/models && ipython model_vaemdn.py benchmark
 
 
     - name: python torch_tabular.py test
       # continue-on-error: true
-      run:  cd source/models && ipython torch_tabular.py test3
+      run:  cd source/models && ipython torch_tabular.py benchmark
 
 
     - name: python optuna_lightgbm.py test
@@ -112,14 +112,14 @@ jobs:
     - name: python keras_widedeep.py  test
       continue-on-error: true
       run:  |
-            cd source/models && ipython keras_widedeep.py  test3
+            cd source/models && ipython keras_widedeep.py  benchmark
             echo "keras_widedeep.py" >> file_check.txt
       ## ipython keras_widedeep.py  test2
 
     - name: python keras_widedeep_dense.py  test
       # continue-on-error: true
       run:  |
-            cd source/models && ipython keras_widedeep_dense.py  test3
+            cd source/models && ipython keras_widedeep_dense.py  benchmark
             echo "keras_widedeep_dense.py" >> file_check.txt
 
 

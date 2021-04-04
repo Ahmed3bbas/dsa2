@@ -1,19 +1,16 @@
+
 # pylint: disable=C0321,C0103,C0301,E1305,E1121,C0302,C0330,C0111,W0613,W0611,R1705
 # -*- coding: utf-8 -*-
 """
 Genreate New train_data  by sampling existing data.
-
 python model_sampler.py test
-
 Transformation for ALL Columns :   Increase samples, Reduce Samples.
-
 WARNING :
 Main isssue is the number of rows change  !!!!
   cannot merge with others
   --> store as train data
   train data ---> new train data
   Transformation with less rows !
-
 """
 import os, sys,copy, pathlib, pprint, json, pandas as pd, numpy as np, scipy as sci, sklearn
 

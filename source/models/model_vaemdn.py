@@ -43,7 +43,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 import tensorflow as tf
-assert "2.4"  in str(tf.version.VERSION), 'Compatible only with TF 2.4.1, keras 2.4.3, ' + str(tf.version.VERSION)
+#assert "2.4"  in str(tf.version.VERSION), 'Compatible only with TF 2.4.1, keras 2.4.3, ' + str(tf.version.VERSION)
 
 from tensorflow import keras
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
@@ -178,7 +178,6 @@ def VAEMDN(model_pars):
 
     vae.add_loss(vae_loss)
     vae.compile(optimizer='adam')
-    print(vae.summary() )
     return vae, encoder, decoder
 
 
@@ -199,14 +198,14 @@ def AUTOENCODER_BASIC(X_input_dim,loss_type="CosineSimilarity", lr=0.01, epsilon
     # encodingdim = 50
     # input =  tf.keras.layers.Input(X.shape[1],sparse=True) # use this if tensor is sparse
     inputs  = tf.keras.layers.Input(X_input_dim)
-    encoded = tf.keras.layers.Dense( dim_list[0], activation='relu')(inputs)
-    encoded = tf.keras.layers.Dense( dim_list[1], activation='relu')(encoded)
-    encoded = tf.keras.layers.Dense( dim_list[2], activation='relu')(encoded)
+    encoded = tf.keras.layers.Dense( int(dim_list[0]), activation='relu')(inputs)
+    encoded = tf.keras.layers.Dense( int(dim_list[1]), activation='relu')(encoded)
+    encoded = tf.keras.layers.Dense( int(dim_list[2]), activation='relu')(encoded)
 
 
-    decoded_input = tf.keras.layers.Input( dim_list[2] )
-    decoded = tf.keras.layers.Dense(dim_list[1], activation='relu')(decoded_input)
-    decoded = tf.keras.layers.Dense(dim_list[0], activation='relu')(decoded)
+    decoded_input = tf.keras.layers.Input( int(dim_list[2]) )
+    decoded = tf.keras.layers.Dense(int(dim_list[1]), activation='relu')(decoded_input)
+    decoded = tf.keras.layers.Dense(int(dim_list[0]), activation='relu')(decoded)
     decoded = tf.keras.layers.Dense(X_input_dim, activation='relu')(decoded)
     
     encoder = tf.keras.models.Model(inputs=inputs,outputs=encoded,name='encoder')
@@ -219,7 +218,6 @@ def AUTOENCODER_BASIC(X_input_dim,loss_type="CosineSimilarity", lr=0.01, epsilon
     autoencoder = tf.keras.models.Model(inputs,outputs)
     opt         = tf.keras.optimizers.Adagrad(lr=lr, epsilon=epsilon, decay=decay)
 
-
     if loss_type == "cosinesimilarity" :
        autoencoder.compile(optimizer=opt, loss=tf.keras.losses.CosineSimilarity(reduction="auto")) # cosine loss
 
@@ -229,7 +227,7 @@ def AUTOENCODER_BASIC(X_input_dim,loss_type="CosineSimilarity", lr=0.01, epsilon
     else :
        autoencoder.compile(optimizer=opt, loss= tf.keras.losses.categorical_crossentropy) # this is same algorith explained as "CustomLoss" topic in pytorch version.
 
-    log2(autoencoder.summary())
+    #log2(autoencoder.summary())
     return autoencoder,encoder,decoder
 
 
@@ -269,7 +267,7 @@ def AUTOENCODER_MULTIMODAL(input_shapes=[10],
     """
     # Remove 'tensorflow.' from the next line if you use just Keras
 
-    from mmae.multimodal_autoencoder import MultimodalAutoencoder
+    from repo.keras_mmae.multimodal_autoencoder import MultimodalAutoencoder
 
     # Set network parameters
     #input_shapes = [x_train.shape[1:], (1,)]
@@ -329,7 +327,8 @@ class Model(object):
             self.model, self.encoder, self.decoder = VAEMDN( self.model_pars['model_pars'])
         else:
             self.model,self.encoder, self.decoder = AUTOENCODER_BASIC(dim)
-        log2(self.model_pars, self.model)
+        
+        log2(self.model)
         # self.model.summary()
 
 
@@ -856,7 +855,7 @@ def test2(n_sample          = 1000):
 
 
 
-def test3(n_sample          = 1000):
+def test3(n_sample = 1000):
     df, colnum, colcat, coly,colyembed = test_dataset_petfinder(nrows= n_sample)
     X,y, X_train, X_valid, y_train, y_valid, X_test,  y_test, num_classes  = train_test_split2(df, coly)
 
@@ -986,44 +985,70 @@ def test_helper(model_pars, data_pars, compute_pars):
     log('Model architecture:')
     log(model.model.summary())
 
-def test_autoencoder(model_pars, data_pars, compute_pars):
-    global model, session
-    init()
-    root  = "ztmp/"
-    dim = model_pars['model_pars']['original_dim']
-    model = Model(model_pars=model_pars, data_pars=data_pars, compute_pars=compute_pars)
-
-    log('Training the model..')
-    fit(data_pars=data_pars, compute_pars=compute_pars, out_pars=None)
 
 
-    log('Predict data..')
-    Xnew = predict(data_pars=data_pars,  compute_pars=compute_pars)
+def benchmark(config='', dmin=5, dmax=6):
+    from pmlb import fetch_data, classification_dataset_names
+    from sdv.evaluation import evaluate
+
+    for classification_dataset in classification_dataset_names[dmin:dmax]:
+        X, y = fetch_data(classification_dataset, return_X_y=True)
+        
+        X_train_full, X_test, y_train_full, y_test = train_test_split(X, y, test_size=0.05, random_state=2021)
+        X_train, X_valid, y_train, y_valid         = train_test_split(X_train_full, y_train_full, random_state=2021)
+        def post_process_fun(y): return int(y)
+        def pre_process_fun(y):  return int(y)
+        #####
+        # y = y.astype('uint8')
+        num_classes  = len(np.unique(y))
+        print(np.unique(y))
+        model_pars = {
+            'model_pars' : {
+            'original_dim':       X.shape[1],
+            'class_num':            num_classes,
+            'intermediate_dim':     64,
+            'intermediate_dim_2':   16,
+            'latent_dim' :           3,
+            'Lambda1'    :           1,
+            'batch_size' :         256,
+            'Lambda2'    :         200,
+            'Alpha'      :         0.075
+        }
+        , 'post_process_fun' : post_process_fun   ### After prediction  ##########################################
+        , 'pre_process_pars' : {'y_norm_fun' :  pre_process_fun ,  ### Before training  ##########################
+
+        ### Pipeline for data processing ##############################
+        'pipe_list': [  #### coly target prorcessing
+            {'uri': 'source/prepro.py::pd_coly',                 'pars': {}, 'cols_family': 'coly',       'cols_out': 'coly',           'type': 'coly'         },
+            {'uri': 'source/prepro.py::pd_colnum_bin',           'pars': {}, 'cols_family': 'colnum',     'cols_out': 'colnum_bin',     'type': ''             },
+            {'uri': 'source/prepro.py::pd_colcat_bin',           'pars': {}, 'cols_family': 'colcat',     'cols_out': 'colcat_bin',     'type': ''             },
+        ],
+        }
+        }
+
+        log(f'{classification_dataset} Metrics: ------------')
+        column  = [f'col_{i}' for i in range(X.shape[1])]
+        real_df = pd.DataFrame(X_test,columns=column)
+
+        ##### VAEMDN
+        vae,vae_enc,vae_dec= VAEMDN(model_pars=model_pars['model_pars'])
+        vae.fit([X_train_full,y_train_full],epochs=50)
+        vae_data = vae.predict([X_test,y_test])
+        vae_df   = pd.DataFrame(vae_data,columns=column)
+        evl_vae  = evaluate(real_df,vae_df,metrics=['LogisticDetection','CSTest', 'KSTest'])
+        log(f'Evaluation on VAE: {evl_vae}')
 
 
-    log('Encode data..')
-    encoded = encode(data_pars=data_pars,  compute_pars=compute_pars)
-    print('Encoded X (Batch 1): \n', encoded)
-
-    #log(encoded)
-    #There are different batches of Dataframe we have to perform on each batches
-
-    log('Deccode data..')
-    decoded = decode(Xpred = encoded,data_pars=data_pars, compute_pars=compute_pars)
-    print('Decoded X: \n')
-    log(decoded)
+        log("##### AE")
+        basic_ae,ae_enc,ae_dec = AUTOENCODER_BASIC(X.shape[1])
+        basic_ae.fit(X_train_full,X_train_full,epochs = 50)
+        basic_data = basic_ae.predict(X_test)
+        basic_df   = pd.DataFrame(basic_data,columns=column)
+        evl_ae     = evaluate(real_df,basic_df,metrics=['LogisticDetection','CSTest', 'KSTest'])
+        log(f'Evaluation on Basic_AE: {evl_ae}')
 
 
-    log('Saving model..')
-    log( model.model.summary() )
-    save(path= root + '/model_dir/')
 
-    '''log('Load model..')
-    model, session = load_model(path= root + "/model_dir/")
-
-    log('Model architecture:')
-    log(model.model.summary())
-    '''
 
 
 if __name__ == "__main__":
