@@ -9,14 +9,12 @@
 """
 import warnings, sys, gc, os, sys, json, copy, pandas as pd
 warnings.filterwarnings('ignore')
-
 ####################################################################################################
-try   : verbosity = int(json.load(open(os.path.dirname(os.path.abspath(__file__)) + "/../config.json", mode='r'))['verbosity'])
-except Exception as e : verbosity = 4
-#raise Exception(f"{e}")
+from utilmy import global_verbosity, os_makedirs
+verbosity = global_verbosity(__file__, "/../config.json" ,default= 5)
 
 def log(*s):
-    print(*s, flush=True)
+    if verbosity >= 1 : print(*s, flush=True)
 
 def log2(*s):
     if verbosity >= 2 : print(*s, flush=True)
@@ -24,20 +22,12 @@ def log2(*s):
 def log3(*s):
     if verbosity >= 3 : print(*s, flush=True)
 
-def os_makedirs(dir_or_file):
-    if os.path.isfile(dir_or_file) :os.makedirs(os.path.dirname(os.path.abspath(dir_or_file)), exist_ok=True)
-    else : os.makedirs(os.path.abspath(dir_or_file), exist_ok=True)
-
-
 
 ####################################################################################################
 #### Add path for python import
 sys.path.append( os.path.dirname(os.path.abspath(__file__)) + "/")
-
-
-#### Root folder analysis
 root = os.path.abspath(os.getcwd()).replace("\\", "/") + "/"
-# print(root)
+log(root)
 
 
 ####################################################################################################
@@ -52,10 +42,6 @@ from util_feature import  save, load_function_uri, load_dataset
 
 def save_features(df, name, path=None):
     """ Save dataframe on disk
-    :param df:
-    :param name:
-    :param path:
-    :return:
     """
     if path is not None :
        os.makedirs( f"{path}/{name}" , exist_ok=True)
@@ -79,18 +65,26 @@ def load_features(name, path):
 
 
 def model_dict_load(model_dict, config_path, config_name, verbose=True):
-    """
-    :param model_dict:
-    :param config_path:
-    :param config_name:
-    :param verbose:
+    """ Load the model dict from the python config file.
+       ### Issue wiht passing function durin pickle on disk
     :return:
     """
     if model_dict is None :
-       log("#### Model Params Dynamic loading  ###############################################")
-       model_dict_fun = load_function_uri(uri_name=config_path + "::" + config_name)
-       model_dict     = model_dict_fun()   ### params
-    if verbose : log( model_dict )
+      log("#### Model Params Dynamic loading  ###############################################")
+      model_dict_fun = load_function_uri(uri_name=config_path + "::" + config_name)
+      model_dict     = model_dict_fun()   ### params
+
+    else :
+        ### Passing dict
+        ### Due to Error when saving on disk the model, function definition is LOST, need dynamic load
+        path_config = model_dict[ 'global_pars']['config_path']
+
+        p1 = path_config + "::" + model_dict['model_pars']['post_process_fun'].__name__
+        model_dict['model_pars']['post_process_fun'] = load_function_uri( p1)
+
+        p1 = path_config + "::" + model_dict['model_pars']['pre_process_pars']['y_norm_fun'] .__name__
+        model_dict['model_pars']['pre_process_pars']['y_norm_fun'] = load_function_uri( p1 )
+
     return model_dict
 
 
@@ -98,10 +92,7 @@ def model_dict_load(model_dict, config_path, config_name, verbose=True):
 ####################################################################################################
 def preprocess(path_train_X="", path_train_y="", path_pipeline_export="", cols_group=None, n_sample=5000,
                preprocess_pars={}, path_features_store=None):
-    """
-      Used for trainiing only
-      Save params on disk
-
+    """ Used for trainiing only, Save params on disk
     :param path_train_X:
     :param path_train_y:
     :param path_pipeline_export:
@@ -350,11 +341,12 @@ def preprocess_load(path_train_X="", path_train_y="", path_pipeline_export="", c
     :return:
     """
     from source.util_feature import load
+    from utilmy  import pd_read_file
 
-    dfXy    = pd.read_parquet(path_features_store + "/dfX/features.parquet")
+    dfXy    = pd_read_file(path_features_store + "/dfX/*.parquet")
 
     try :
-       dfy  = pd.read_parquet(path_features_store + "/dfy/features.parquet")
+       dfy  = pd_read_file(path_features_store + "/dfy/*.parquet")
        dfXy = dfXy.join(dfy, on= cols_group['colid']  , how="left")
 
     except :
@@ -370,7 +362,6 @@ def preprocess_load(path_train_X="", path_train_y="", path_pipeline_export="", c
 ############CLI Command ############################################################################
 def run_preprocess(config_name, config_path, n_sample=5000,
                    mode='run_preprocess', model_dict=None):     #prefix "pre" added, in order to make if loop possible
-
     """
     :param config_name:   titanic_lightgbm
     :param config_path:   titanic_classifier.py
@@ -379,7 +370,6 @@ def run_preprocess(config_name, config_path, n_sample=5000,
     :param model_dict:  Optional provide the dict model
     :return: None,  only show and save dataframe
     """
-
     model_dict = model_dict_load(model_dict, config_path, config_name, verbose=True)
 
     m = model_dict['global_pars']
@@ -391,19 +381,11 @@ def run_preprocess(config_name, config_path, n_sample=5000,
     path_pipeline       = m.get('path_pipeline',       path_output + "/pipeline/" )
     path_features_store = m.get('path_features_store', path_output + '/features_store/' )  #path_data_train replaced with path_output, because preprocessed files are stored there
     path_check_out      = m.get('path_check_out',      path_output + "/check/" )
-    log(path_output)
+    log2(path_output)
 
 
     log("#### load input column family  ###################################################")
-    try :
-        cols_group = model_dict['data_pars']['cols_input_type']  ### the model config file
-    except :
-        cols_group = json.load(open(path_data + "/cols_group.json", mode='r'))
-
-    #pars_download = model_dict['data_pars'].get('download_pars', None )
-    #if pars_download :
-    #    for url, target_path in pars_download['']:
-    #        pass
+    cols_group = model_dict['data_pars']['cols_input_type']  ### the model config file
 
 
     log("#### Preprocess  #################################################################")
@@ -420,15 +402,15 @@ def run_preprocess(config_name, config_path, n_sample=5000,
 
     ### Generate actual column names from colum groups  INTO a single list of columns
     model_dict['data_pars']['cols_model'] = sum([  cols[colgroup] for colgroup in model_dict['data_pars']['cols_model_group'] ]   , [])
-    log(  model_dict['data_pars']['cols_model'] , model_dict['data_pars']['coly'])
+    log2(  model_dict['data_pars']['cols_model'] , model_dict['data_pars']['coly'])
 
 
-    log("#### Save data on disk #############################")
+    log("#### Save data on disk ############################################################")
     dfXy.to_parquet( path_output  +"/dfXy.parquet"  )
     save(model_dict, path_output  +"/model_dict.pkl")
 
 
-    log("######### finish #################################", )
+    log("######### finish ################################################################", )
 
 
 if __name__ == "__main__":
