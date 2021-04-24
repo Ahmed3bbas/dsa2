@@ -45,21 +45,22 @@ def reset():
     model, session = None, None
 
 ####################################################################################################
+
+## Modules && MODELS
 from sklearn.linear_model import *
 from sklearn.ensemble import *
 from sklearn.tree import *
 from lightgbm import LGBMModel, LGBMRegressor, LGBMClassifier
 from sktime.forecasting.base import ForecastingHorizon
-from sktime.transformers.single_series.detrend import Deseasonalizer, Detrender
+# from sktime.transformers.single_series.detrend import Deseasonalizer, Detrender
 from sktime.forecasting.trend import PolynomialTrendForecaster
-from sktime.forecasting.model_selection import (
-    temporal_train_test_split,
-)
+from sktime.forecasting.model_selection import temporal_train_test_split
+
 from sktime.utils.plotting import plot_series
 from sktime.forecasting.compose import (
-    TransformedTargetForecaster,
-    ReducedRegressionForecaster
-)
+       TransformedTargetForecaster,
+       ReducedForecaster # ReducedRegressionForecaster
+    )
 
 
 class myModel(object):
@@ -76,7 +77,7 @@ def LighGBM_recursive(lightgbm_pars= {'objective':'quantile', 'alpha': 0.5},
     #Initialize Light GBM Regressor
     from sktime.forecasting.compose import (
        TransformedTargetForecaster,
-      ReducedRegressionForecaster
+       ReducedForecaster #, ReducedRegressionForecaster
     )
 
     regressor = LGBMRegressor(**lightgbm_pars)
@@ -88,6 +89,7 @@ def LighGBM_recursive(lightgbm_pars= {'objective':'quantile', 'alpha': 0.5},
 
 
 ####################################################################################################
+### Model class && helper function
 class Model(object):
     def __init__(self, model_pars=None, data_pars=None, compute_pars=None):
         self.model_pars, self.compute_pars, self.data_pars = model_pars, compute_pars, data_pars
@@ -95,7 +97,7 @@ class Model(object):
         if model_pars is None:
             self.model = None
         else:
-            model_class = globals()[model_pars['model_class']]
+            model_class = globals()[model_pars['model_class'].split(':')[-1]]
             self.model = model_class(**model_pars['model_pars'])
             log(model_class, self.model)
 
@@ -105,6 +107,8 @@ def fit(data_pars=None, compute_pars=None, out_pars=None, **kw):
     """
     global model, session
     session = None  # Session type for compute
+
+    # get&split data
     Xtrain, ytrain, Xtest, ytest = get_dataset(data_pars, task_type="train")
     log(Xtrain.shape, model.model)
 
@@ -122,9 +126,9 @@ def predict(Xpred=None, data_pars={}, compute_pars={}, out_pars={}, **kw):
         data_pars['train'] = False
         Xpred = get_dataset(data_pars, task_type="predict")
 
-    Xpred_fh = ForecastingHorizon(Xpred.index, is_relative=False)
+    # Xpred_fh = ForecastingHorizon(Xpred.index, is_relative=False)
 
-    ypred = model.model.predict(Xpred_fh)
+    ypred = model.model.predict(Xpred)
 
     ypred_proba = None  ### No proba
     return ypred, ypred_proba
@@ -161,7 +165,8 @@ def predict_forward(Xpred=None, data_pars={}, compute_pars={}, out_pars={}, **kw
     return ypred, ypred_proba
 
 
-
+#########################################################################################################
+### helper Function
 def save(path=None, info=None):
     global model, session
     import cloudpickle as pickle
@@ -201,14 +206,15 @@ def load_info(path=""):
 ####################################################################################################
 def get_dataset(data_pars=None, task_type="train", **kw):
     """
+    return tuple of dataframes OR single dataframe
       "ram"  :
       "file" :
     """
     # log(data_pars)
     data_type  = data_pars.get('type', 'ram')
+
+    ### Sparse columns, Dense Columns
     cols_type  = data_pars.get('cols_model_type2', {})   #### Split input by Sparse, Continous
-    cols_model = data_pars['cols_model']
-    coly       = data_pars['coly']
 
     log3("Cols Type:", cols_type)
 
@@ -233,21 +239,30 @@ def get_dataset(data_pars=None, task_type="train", **kw):
 
 
 ####################################################################################################################
-def test_dataset_tseries(nrows=10000):
-    url_csv = "demand tseries"
-    df = pd.read_csv(url_csv)
-    coly=None,
-    coldate=None,
-    colcat=None
-    df = df.groupby([coldate])[coly].sum().reset_index()
-    df = df.set_index(coldate)  #### Date as
-    df.index.freq="D"
-    df[coldate] = pd.to_datetime(df[coldate])
-    return df, coly, coldate, colcat
+def test_dataset_tseries(nrows=10000, coly=None, coldate=None, colcat=None):
+    
+    # read data 
+    train_csv = "data/input/tseries_demand/train/features.zip"
+    test_csv = "data/input/tseries_demand/test/features.zip"
+
+    df1 = pd.read_csv(train_csv)
+    df2 = pd.read_csv(test_csv)
+
+    # df = df.groupby([coldate])[coly].sum().reset_index()
+
+    # date as index
+    df1 = df1.set_index(coldate)  #### Date as
+    df1.index.freq="D"
+    df2 = df2.set_index(coldate)  #### Date as
+    df2.index.freq="D"
+    
+    # df[coldate] = pd.to_datetime(df.index)
+
+    return df1, df2
 
 
 
-def time_train_test_split(df, test_period = 40, cols=None , coltime ="time_key", sort=True, minsize=5,
+def time_train_test_split(df, test_size = 0.4, cols=None , coltime ="time_key", sort=True, minsize=5,
                      n_sample=5,
                      verbose=False) :
    cols = list(df.columns) if cols is None else cols
@@ -256,7 +271,7 @@ def time_train_test_split(df, test_period = 40, cols=None , coltime ="time_key",
    #imax = len(df) - test_period
    colkey = [ t for t in cols if t not in [coltime] ]  #### All time reference be removed
    if verbose : log(colkey)
-   imax = test_period * n_sample ## Over sampling
+   imax = test_size * n_sample ## Over sampling
    df1  = df.groupby( colkey ).apply(lambda dfi : dfi.iloc[:max(minsize, len(dfi) -imax), :] ).reset_index(colkey, drop=True).reset_index(drop=True)
    df2  = df.groupby( colkey ).apply(lambda dfi : dfi.iloc[max(minsize,  len(dfi) -imax):, :] ).reset_index(colkey, drop=True).reset_index(drop=True)
    return df1, df2
@@ -265,15 +280,30 @@ def time_train_test_split(df, test_period = 40, cols=None , coltime ="time_key",
 def test():
     global model, session
 
-    df, coly, coldate, colcat = test_dataset_tseries()
-    X = df
-    y = df[coly].astype('uint8')
-    log('y', np.sum(y[y==1]) )
+    coly = 'sales'
+    coldate = 'date'
+    colcat  = ['store', 'item']
+
+    train, valid  = test_dataset_tseries(coldate = coldate,  )
 
     # Split the df into train/test subsets
-    X_train_full, X_test, y_train_full, y_test = time_train_test_split(X, y, test_size=0.05, random_state=2021, stratify=y)
-    X_train, X_valid, y_train, y_valid         = time_train_test_split(X_train_full, y_train_full, random_state=2021, stratify=y_train_full)
+    features_cols = [i for i in train.columns if i != coly]
 
+    X_train, X_valid, y_train, y_valid = train[features_cols], valid[features_cols], train[coly], None# valid[coly]
+    log('y', np.sum(y_train) )
+
+    # X = df
+    # y = df[coly].astype('uint8')
+    # log('y', np.sum(y[y==1]) )
+
+    # Split the df into train/test subsets
+    # features_cols = [i for i in df.columns if i != coly]
+    
+    # train_full, test = time_train_test_split(X, test_size=0.05, coltime = coldate)
+    # X_train_full, X_test, y_train_full, y_test = train_full[features_cols], test[features_cols], train_full[coly], test[coly]
+
+    # train, valid         = time_train_test_split(train_full, coltime = coldate)
+    # X_train, X_valid, y_train, y_valid = train[features_cols], valid[features_cols], train[coly], valid[coly]
 
 
     cols_input_type_1 = {
@@ -371,7 +401,7 @@ def test():
 
 
     ll = [
-        ('model_tseries.py::LightGBMregressor',
+        ('model_tseries.py::LGBMRegressor', # LightGBMregressor
             {
             }
         ),
