@@ -282,7 +282,7 @@ def test(n_sample          = 1000):
     },
 
     'compute_pars': { 'metric_list': ['accuracy_score','average_precision_score']
-     },
+    },
 
     'data_pars': { 'n_sample' : n_sample,
         'download_pars' : None,

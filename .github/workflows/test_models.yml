@@ -129,7 +129,7 @@ jobs:
 
     ########### SKlearn type #########################################################################
     - name: python model_gefs.py test
-      # continue-on-error: true
+      continue-on-error: true
       run:  cd source/models && ipython model_gefs.py test   && echo "model_gefs.py" >> file_check.txt
 
 

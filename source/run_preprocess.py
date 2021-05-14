@@ -90,6 +90,26 @@ def model_dict_load(model_dict, config_path, config_name, verbose=True):
 
 ####################################################################################################
 ####################################################################################################
+def preprocess_batch(path_train_X="", path_train_y="", path_pipeline_export="", cols_group=None, n_sample=5000,
+               preprocess_pars={}, path_features_store=None):
+   """
+       Process by mini batch of files
+
+   """
+   import glob
+   flist = glob.glob(path_train_X)
+   dfXy_list = []
+   for i,file_i in enumerate(flist) :
+       dfXi, cols_familiy_i = preprocess(file_i, "", path_pipeline_export, cols_group, n_sample,
+                                         preprocess_pars, path_features_store)
+
+       dfXy_list.append( [ dfXi, cols_familiy_i ] )
+
+   cols_family = cols_familiy_i    ### should be all same
+   return dfXy_list, cols_family
+
+
+
 def preprocess(path_train_X="", path_train_y="", path_pipeline_export="", cols_group=None, n_sample=5000,
                preprocess_pars={}, path_features_store=None):
     """ Used for trainiing only, Save params on disk

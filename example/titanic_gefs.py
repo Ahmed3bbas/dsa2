@@ -63,7 +63,7 @@ config_default   = "config1"    ### name of function which contains data configu
 cols_input_type_1 = {
      "coly"   :   "Survived"
     ,"colid"  :   "PassengerId"
-    ,"colcat" :   ["Sex", "Embarked", "Pclass", ]
+    ,"colcat" :   []  # ["Sex", "Embarked", "Pclass", ]
     ,"colnum" :   [ "Age","SibSp", "Parch","Fare"]
     ,"coltext" :  []
     ,"coldate" :  []
